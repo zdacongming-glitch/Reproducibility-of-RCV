@@ -1,0 +1,17 @@
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local agent/tooling state
+.agents/
+
+# Nested-linear generated outputs
+nested_linear_example/outputs/
+nested_linear_example/aligned_smoke/
+nested_linear_example/smoke_outputs/
+nested_linear_example/outputs_rerun/
+
+# CCPP rerun outputs
+ccpp_case_study/outputs/full_run_rerun/
+ccpp_case_study/outputs/full_figures_rerun/
