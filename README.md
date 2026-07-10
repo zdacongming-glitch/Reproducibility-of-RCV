@@ -1,49 +1,26 @@
 # Reproducibility Package
 
 This repository is the top-level reproducibility package for three experiments.
-The current snapshot contains the first simulation experiment and the third
-case-study experiment. The second simulation experiment is still reserved.
+The current snapshot contains both simulation experiments and the CCPP case
+study.
 
 ## Experiment Status
 
 | Order | Experiment | Status | Directory | Main artifacts |
 | --- | --- | --- | --- | --- |
 | 1 | Nested-linear simulation | Available | `nested_linear_example/` | raw CSVs, summary CSVs, threshold summaries, PNG plots |
-| 2 | Teacher-student simulation | Interface reserved | `teacher_student_simulation/` | To be added |
+| 2 | Neural-network teacher-student simulation | Available | `neaural_network_experiment/` | raw metrics, aggregated metrics, selection frequencies, tradeoff tables, plots |
 | 3 | CCPP case study | Available | `ccpp_case_study/` | `fig_ccpp_case_study_main`, `fig_ccpp_radius_mismatch` |
 
-## GitHub Upload Policy
+## Repository Contents
 
-For `nested_linear_example/`, keep the reproducible source package and tests in
-Git:
+This repository tracks source code, experiment configurations, tests,
+documentation, and required input data. Generated outputs, local caches,
+virtual environments, and model checkpoints are excluded through
+`.gitignore`.
 
-```text
-nested_linear_example/README.md
-nested_linear_example/pyproject.toml
-nested_linear_example/robust_cv_sim/*.py
-nested_linear_example/tests/*.py
-```
-
-Do not upload local caches or generated experiment outputs:
-
-```text
-nested_linear_example/.agents/
-nested_linear_example/.pytest_cache/
-nested_linear_example/**/__pycache__/
-nested_linear_example/outputs/
-nested_linear_example/aligned_smoke/
-nested_linear_example/smoke_outputs/
-nested_linear_example/outputs_rerun/
-```
-
-The reason is practical: `nested_linear_example/outputs/` currently contains
-404 generated files and is about 390 MB. Its largest raw files are
-`experiment_3_raw.csv.gz` at about 185 MB, `experiment_2_raw.csv.gz` at about
-84 MB, and `experiment_1_raw.csv.gz` at about 31 MB. These files are
-reconstructible from the source code and fixed seeds, so they should stay out
-of the Git repository. If a frozen reference run is needed for a paper artifact,
-put it in a separate release or archival deposit rather than in the source
-tree.
+Contributors should review [`CONTRIBUTING.md`](CONTRIBUTING.md) before staging
+changes or opening a pull request.
 
 ## 1. Nested-Linear Simulation
 
@@ -80,8 +57,8 @@ The package implements three validation criteria:
 
 ### Internal Simulation Sweeps
 
-The package has three internal sweeps, exposed as `experiment_1`,
-`experiment_2`, and `experiment_3` in the runner:
+The package has two internal sweeps, exposed as `experiment_1` and
+`experiment_2` in the runner:
 
 - `experiment_1`: fixed `beta1=1.0`, `beta2=1.0`, `sigma=0.5`; varies sample
   size, train/validation ratio, and robust radius near the adversarial and
@@ -89,12 +66,8 @@ The package has three internal sweeps, exposed as `experiment_1`,
 - `experiment_2`: fixed `beta1=1.0`, `beta2=1.0`, `sigma=0.5`; varies sample
   size from 100 to 5000 to study whether CV selection converges to the
   robust-optimal model.
-- `experiment_3`: varies signal strength `beta2` and noise level `sigma` to
-  study sensitivity of model selection.
 
 ### Setup
-
-From the repository root:
 
 ```bash
 cd nested_linear_example
@@ -102,38 +75,22 @@ python -m pip install -e .
 python -m pip install numpy pandas matplotlib seaborn rich pytest
 ```
 
-`pyproject.toml` currently declares package metadata and pytest settings. The
-runtime dependencies should be installed with the second command above.
-
 ### Tests
-
-Run the unit tests:
 
 ```bash
 python -m pytest
 ```
 
-The current suite covers formulas for adversarial and stochastic CV, the
-Gaussian-Hermite estimators, closed-form robust risks, chunk enumeration,
-resume/merge behavior, summary generation, and plot file patterns.
-
 ### Smoke Run
-
-Use a small number of replications for a quick end-to-end check:
 
 ```bash
 python -m robust_cv_sim.runner --experiments experiment_2 --reps 10 --output-dir smoke_outputs --skip-plots
 ```
 
-This generates raw and summary CSVs without producing the full plot set.
-
 ### Full Run
 
-The default runner executes all three internal sweeps with 1000 Monte Carlo
-replications per configuration and seed `20260319`:
-
 ```bash
-python -m robust_cv_sim.runner --experiments experiment_1 experiment_2 experiment_3 --reps 1000 --seed 20260319 --output-dir outputs_rerun
+python -m robust_cv_sim.runner --experiments experiment_1 experiment_2 --reps 1000 --seed 20260319 --output-dir outputs_rerun
 ```
 
 Useful runner options:
@@ -144,62 +101,142 @@ Useful runner options:
 
 ### Outputs
 
-Each internal sweep writes an experiment subdirectory:
+Each internal sweep writes an experiment subdirectory with raw CSVs, summary
+CSVs, threshold summaries, and plots.
+
+## 2. Neural-Network Teacher-Student Simulation
+
+The second simulation lives in:
 
 ```text
-outputs_rerun/
-  experiment_1/
-    experiment_1_raw.csv.gz
-    experiment_1_summary.csv
-    experiment_1_threshold_summary.csv
-    plots/
-  experiment_2/
-    experiment_2_raw.csv.gz
-    experiment_2_summary.csv
-    experiment_2_threshold_summary.csv
-    plots/
-  experiment_3/
-    experiment_3_raw.csv.gz
-    experiment_3_summary.csv
-    experiment_3_threshold_summary.csv
-    plots/
+neaural_network_experiment/
 ```
 
-The raw files contain one row per replication, configuration, criterion, and
-radius. The summary files aggregate selection probabilities, robust losses,
-confidence intervals, and threshold summaries. Plots are generated from the raw
-CSV files by `robust_cv_sim.reporting`.
-
-## 2. Teacher-Student Simulation
-
-Status: code not yet included.
-
-Reserved directory:
+It studies robust procedure selection in a synthetic teacher-student regression
+problem. The feature vector is split into core, fragile, and noise blocks:
 
 ```text
-teacher_student_simulation/
+X = (X_core, X_frag, X_noise)
+Y = g_*(X_core) + lambda h_*(X_frag) + epsilon
 ```
 
-Reserved package entry point:
+The teacher functions `g_*` and `h_*` are two-layer ReLU networks. The
+simulation compares four training procedures under attacked covariates:
 
-```text
-python -m teacher_student_repro
-```
+- `erm`: standard MSE training on all features;
+- `at`: adversarial training under the training threat model;
+- `sr`: stochastic robust training with random perturbations;
+- `core_only`: an MLP restricted to the core feature block.
 
-Reserved command interface:
+The threat model perturbs fragile features only and supports restricted `L_inf`
+and restricted `L2` attacks.
+
+### Execution Order
+
+The main command runs the experiment first and then makes plots.
+
+Concretely, `scripts/runner.py main` calls
+`src.experiments.pipeline.run_experiment_grid`. That function:
+
+1. expands the training grid over `(n_total, lambda, r_train, threat_model)`;
+2. runs all replications and SR-CV procedure selection;
+3. writes `raw_metrics.csv`, `aggregated_metrics.csv`,
+   `selection_frequencies.csv`, `tradeoff_raw.csv`, `tradeoff_summary.csv`,
+   `winner_switch_points.csv`, and `manifests/run_config.yaml`;
+4. calls `make_all_plots(...)` to write figures under `plots/`.
+
+The separate `plots` command is a plot-only path for existing CSV outputs; it
+reads `aggregated_metrics.csv`, `selection_frequencies.csv`, and
+`raw_metrics.csv` from a completed run directory and redraws the figures.
+
+### Setup
+
+Python 3.11 is the target environment.
 
 ```bash
-cd teacher_student_simulation
+cd neaural_network_experiment
 python -m pip install -r requirements.txt
-python -m teacher_student_repro run --config configs/smoke.json --output-dir outputs/smoke_run --figure-dir outputs/smoke_figures --no-progress
-python -m teacher_student_repro verify --config configs/smoke.json --run-dir outputs/smoke_run --figure-dir outputs/smoke_figures
-python -m teacher_student_repro run --config configs/full.json --output-dir outputs/full_run --figure-dir outputs/full_figures
-python -m teacher_student_repro verify --config configs/full.json --run-dir outputs/full_run --figure-dir outputs/full_figures
 ```
 
-When this simulation is added, this section should document the teacher model,
-student candidates, sample-size and perturbation settings, random seeds,
-expected figures, and verification signatures.
+The declared dependencies are `torch`, `numpy`, `pandas`, `matplotlib`,
+`PyYAML`, `tqdm`, and `pytest`.
+
+### Smoke Run
+
+```bash
+python scripts/runner.py smoke
+```
+
+The smoke configuration uses `n_total=240`, two `lambda` values, two evaluation
+radii, one training radius, one threat model, and two replications.
+
+### Main Runs
+
+```bash
+python scripts/runner.py main --scale lite --workers 2
+python scripts/runner.py main --scale medium --workers 4
+python scripts/runner.py main --scale full --workers 6
+```
+
+The default main scale is `medium`. Use `lite` for quick visual validation
+before running `medium` or `full`.
+
+### Plot-Only Reproduction
+
+```bash
+python scripts/runner.py plots --input-dir outputs/main_medium_YYYYMMDD_HHMMSS
+```
+
+This command does not train models. It only redraws plots from existing CSVs.
+
+### Convenience Wrappers
+
+```bash
+python scripts/run_smoke_test.py
+python scripts/run_main_experiment.py
+python scripts/make_all_plots.py --input-dir outputs/main_medium_YYYYMMDD_HHMMSS
+```
+
+`run_main_experiment.py` calls the default `main` command, which currently means
+`main --scale medium` unless overridden through `runner.py` directly.
+
+### Outputs
+
+A normal run writes a timestamped directory under `outputs/`, unless
+`--output-dir` is supplied:
+
+```text
+outputs/<run_name>_YYYYMMDD_HHMMSS/
+  raw_metrics.csv
+  aggregated_metrics.csv
+  selection_frequencies.csv
+  tradeoff_raw.csv
+  tradeoff_summary.csv
+  winner_switch_points.csv
+  manifests/run_config.yaml
+  plots/*.png
+  plots/*.pdf
+```
+
+The raw table is per replication, procedure, and `r_eval`. The aggregated tables
+summarize stochastic robust MSE, SR-CV scores, training time, best epochs, and
+SR-CV/oracle agreement. The plot set includes robust-risk curves, selected
+procedure frequencies, phase diagrams, agreement heatmaps, and clean-endpoint
+versus robust-risk tradeoff plots.
+
+### Multi-GPU Runs
+
+On a multi-GPU server, the same runner can split grid points across devices:
+
+```bash
+python scripts/runner.py multi-gpu smoke --devices 0,1 --workers-per-gpu 1
+python scripts/runner.py multi-gpu main --scale lite --devices 0,1 --workers-per-gpu 1
+python scripts/runner.py multi-gpu main --scale medium --devices 0,1 --workers-per-gpu 1
+```
+
+The final output directory has the same public CSV and plot files as a normal
+run, with additional worker diagnostics under `partials/` and
+`manifests/multi_gpu.yaml`.
 
 ## 3. CCPP Case Study
 
@@ -233,8 +270,6 @@ files.
 
 ### Setup
 
-From the repository root:
-
 ```bash
 cd ccpp_case_study
 python -m pip install -r requirements.txt
@@ -245,16 +280,11 @@ The required Python packages are `matplotlib`, `numpy`, `openpyxl`, `pandas`,
 
 ### Quick Verification of Existing Outputs
 
-The repository currently includes generated full-run CSV outputs and figures
-under `ccpp_case_study/outputs/`. To verify them without refitting models:
-
 ```bash
 python -m ccpp_repro verify --config configs/ccpp_full.json --run-dir outputs/full_run --figure-dir outputs/full_figures
 ```
 
 ### Plot-Only Reproduction
-
-To regenerate the manuscript figures from existing full-run CSV outputs:
 
 ```bash
 python -m ccpp_repro plot-only --config configs/ccpp_full.json --run-dir outputs/full_run --figure-dir outputs/plot_only_figures
@@ -273,16 +303,10 @@ fig_ccpp_radius_mismatch.png
 
 ### Smoke Test From Raw Data
 
-The smoke configuration runs the same pipeline on a tiny radius grid with one
-outer repeat and two inner repeats:
-
 ```bash
 python -m ccpp_repro run --config configs/ccpp_smoke.json --output-dir outputs/smoke_run --figure-dir outputs/smoke_figures --no-progress
 python -m ccpp_repro verify --config configs/ccpp_smoke.json --run-dir outputs/smoke_run --figure-dir outputs/smoke_figures
 ```
-
-This checks data loading, model fitting, validation scoring, test scoring,
-aggregation, radius-mismatch post-processing, plotting, and verification.
 
 ### Full Reproduction From Raw Data
 
@@ -323,15 +347,9 @@ used for the validation-radius mismatch figure. It does not refit models; it
 recombines selected models at validation radius `r_val` with outer-test robust
 scores at evaluation radius `r_eval`.
 
-## Notes for Adding the Remaining Simulation
+## Notes
 
-To keep the final package consistent, the remaining simulation should include:
-
-- `README.md` with experiment-specific details;
-- dependency metadata or `requirements.txt`;
-- a smoke command for a quick end-to-end test;
-- a full-run command for the manuscript run;
-- optional archived artifacts outside the Git source tree if plot-only
-  reproduction is required;
-- deterministic seeds and explicit verification checks for row counts,
-  numerical signatures, and generated figures.
+Generated experiment outputs are intentionally excluded from the source tree.
+If exact reference outputs are needed for publication review, archive them
+outside Git, for example in a release artifact or data repository, and keep this
+repository focused on code, configuration, tests, and lightweight documentation.

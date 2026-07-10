@@ -56,17 +56,6 @@ y = beta1 * x1 + beta2 * x2 + eps
 - adversarial 半径：`0.5, 0.7, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2`
 - stochastic 半径：`0.5, 0.8, 1.0, 1.5, sqrt(3), 2.0, 2.2`
 
-### Experiment 3
-
-考察信号强度和噪声强度变化对模型选择的影响。
-
-默认设置：
-
-- `beta2 = 0.5, 1.0, 1.5, 2.0`
-- `sigma = 0.2, 0.5, 1.0`
-- 样本量：`n = 1000, 2000`
-- 训练比例：`0.1, 0.2, ..., 0.9`
-
 ## 项目结构
 
 ```text
@@ -199,7 +188,7 @@ python -m pytest
 - adversarial 和 stochastic CV 公式
 - Gaussian-Hermite 估计器的基本数值性质
 - 闭式鲁棒风险公式
-- 三个实验的 chunk 枚举
+- 两个实验的 chunk 枚举
 - chunk 写入、合并和 resume 相关逻辑
 - summary 和绘图辅助函数
 - experiment 2 默认 adversarial 半径集合

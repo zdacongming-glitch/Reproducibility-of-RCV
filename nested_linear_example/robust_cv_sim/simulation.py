@@ -61,8 +61,6 @@ DEFAULT_EXP2_ADV_RADII = (0.5, 0.7, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2)
 DEFAULT_EXP2_STO_RADII = (0.5, 0.8, 1.0, 1.5, ASYMPTOTIC_STO_THRESHOLD, 2.0, 2.2)
 DEFAULT_EXP1_N_GRID = (1000, 2000)
 DEFAULT_EXP2_N_GRID = (100, 300, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000)
-DEFAULT_EXP3_BETA2_GRID = (0.5, 1.0, 1.5, 2.0)
-DEFAULT_EXP3_SIGMA_GRID = (0.2, 0.5, 1.0)
 
 RAW_RESULT_COLUMNS = [
     "experiment",
@@ -144,8 +142,6 @@ class SimulationConfig:
     exp2_n_grid: tuple[int, ...] = DEFAULT_EXP2_N_GRID
     exp2_radius_grid_adv: tuple[float, ...] = DEFAULT_EXP2_ADV_RADII
     exp2_radius_grid_sto: tuple[float, ...] = DEFAULT_EXP2_STO_RADII
-    exp3_beta2_grid: tuple[float, ...] = DEFAULT_EXP3_BETA2_GRID
-    exp3_sigma_grid: tuple[float, ...] = DEFAULT_EXP3_SIGMA_GRID
 
     def with_updates(self, **kwargs: object) -> "SimulationConfig":
         return replace(self, **kwargs)
@@ -781,22 +777,6 @@ def iter_experiment_chunks(
                 )
         return
 
-    if experiment == "experiment_3":
-        for beta2 in config.exp3_beta2_grid:
-            for sigma in config.exp3_sigma_grid:
-                for n in config.n_grid:
-                    for train_ratio in config.split_grid:
-                        yield ChunkSpec(
-                            experiment=experiment,
-                            n=n,
-                            train_ratio=train_ratio,
-                            beta1=config.beta1,
-                            beta2=beta2,
-                            sigma=sigma,
-                            chunk_id=_chunk_id(experiment, n, train_ratio, config.beta1, beta2, sigma),
-                        )
-        return
-
     raise ValueError(f"Unknown experiment '{experiment}'.")
 
 
@@ -808,8 +788,6 @@ def _radii_for_experiment(
         return config.radius_grid_adv, config.radius_grid_sto
     if experiment == "experiment_2":
         return config.exp2_radius_grid_adv, config.exp2_radius_grid_sto
-    if experiment == "experiment_3":
-        return config.radius_grid_adv, config.radius_grid_sto
     raise ValueError(f"Unknown experiment '{experiment}'.")
 
 
@@ -880,7 +858,3 @@ def run_experiment_1(config: SimulationConfig) -> pd.DataFrame:
 
 def run_experiment_2(config: SimulationConfig) -> pd.DataFrame:
     return _rows_to_dataframe(iter_experiment_rows("experiment_2", config))
-
-
-def run_experiment_3(config: SimulationConfig) -> pd.DataFrame:
-    return _rows_to_dataframe(iter_experiment_rows("experiment_3", config))

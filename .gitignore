@@ -6,11 +6,24 @@ __pycache__/
 # Local agent/tooling state
 .agents/
 
+# Local Python environments
+.venv/
+venv/
+
 # Nested-linear generated outputs
 nested_linear_example/outputs/
 nested_linear_example/aligned_smoke/
 nested_linear_example/smoke_outputs/
 nested_linear_example/outputs_rerun/
+
+# Neural-network generated outputs
+neaural_network_experiment/outputs/
+neaural_network_experiment/smoke_outputs/
+neaural_network_experiment/outputs_rerun/
+neaural_network_experiment/.venv/
+neaural_network_experiment/**/*.pt
+neaural_network_experiment/**/*.pth
+neaural_network_experiment/**/*.ckpt
 
 # CCPP rerun outputs
 ccpp_case_study/outputs/full_run_rerun/

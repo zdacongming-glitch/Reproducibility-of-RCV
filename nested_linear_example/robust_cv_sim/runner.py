@@ -27,8 +27,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--experiments",
         nargs="+",
-        default=["experiment_1", "experiment_2", "experiment_3"],
-        choices=["experiment_1", "experiment_2", "experiment_3"],
+        default=["experiment_1", "experiment_2"],
+        choices=["experiment_1", "experiment_2"],
         help="Experiments to run.",
     )
     parser.add_argument("--reps", type=int, default=1000, help="Monte Carlo replications per configuration.")

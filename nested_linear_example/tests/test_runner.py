@@ -5,6 +5,7 @@ import pandas as pd
 
 from robust_cv_sim.reporting import (
     _asymptotic_threshold_density_curve,
+    _consistency_method_label,
     _consistency_x_offsets,
     _consistency_y_limits,
     _criterion_boxplot_color,
@@ -15,7 +16,6 @@ from robust_cv_sim.reporting import (
     merge_chunks,
     plot_experiment_1,
     plot_experiment_2,
-    plot_experiment_3,
     write_chunk,
 )
 from robust_cv_sim.runner import _chunk_path
@@ -26,7 +26,6 @@ from robust_cv_sim.simulation import (
     run_chunk,
     run_experiment_1,
     run_experiment_2,
-    run_experiment_3,
 )
 
 
@@ -35,12 +34,9 @@ def test_iter_experiment_chunks_counts_match_expected_grids() -> None:
         n_grid=(100, 200),
         split_grid=(0.3, 0.7),
         exp2_n_grid=(50, 60, 70),
-        exp3_beta2_grid=(0.5, 1.0),
-        exp3_sigma_grid=(0.2,),
     )
     assert len(list(iter_experiment_chunks("experiment_1", config))) == 4
     assert len(list(iter_experiment_chunks("experiment_2", config))) == 6
-    assert len(list(iter_experiment_chunks("experiment_3", config))) == 8
 
 
 def test_run_chunk_matches_schema_and_full_experiment_rows() -> None:
@@ -189,28 +185,6 @@ def test_experiment_2_delta_cv_boxplots_are_split_by_r_and_colored(tmp_path: Pat
         assert f"exp2_stochastic_trainratio_0.5_r_{r_label}_delta_cv_boxplot.png" in files
 
 
-def test_experiment_3_plot_file_pattern_is_unchanged(tmp_path: Path) -> None:
-    config = SimulationConfig(
-        reps=1,
-        n_grid=(80,),
-        split_grid=(0.5,),
-        radius_grid_adv=(0.5,),
-        radius_grid_sto=(1.0,),
-        exp3_beta2_grid=(1.0,),
-        exp3_sigma_grid=(0.5,),
-    )
-    df = run_experiment_3(config)
-
-    plot_experiment_3(df, tmp_path)
-
-    files = {path.name for path in tmp_path.glob("*.png")}
-    assert len(files) == 6
-    for criterion in ("adversarial", "aligned_adversarial", "stochastic"):
-        assert f"exp3_{criterion}_n80_trainratio_0.5_loss.png" in files
-        assert f"exp3_{criterion}_n80_trainratio_0.5_selection.png" in files
-    assert not any("delta_cv_boxplot" in name for name in files)
-
-
 def test_small_rep_threshold_bins_are_not_fixed_to_thirty() -> None:
     series = pd.Series([0.95, 0.95, 1.01])
     assert _threshold_bins(series, reps=2) == 3
@@ -230,6 +204,12 @@ def test_consistency_offsets_separate_close_lines() -> None:
     assert len(set(offsets.values())) == 8
     assert offsets[0.5] < 0.0
     assert offsets[2.2] > 0.0
+
+
+def test_consistency_method_labels_use_cv_acronyms() -> None:
+    assert _consistency_method_label("adversarial") == "DACV"
+    assert _consistency_method_label("aligned_adversarial") == "AACV"
+    assert _consistency_method_label("stochastic") == "SRCV"
 
 
 def test_consistency_y_limits_use_zoomed_baseline_for_non_naive_methods() -> None:

@@ -22,7 +22,6 @@ from .simulation import (
     run_chunk,
     run_experiment_1,
     run_experiment_2,
-    run_experiment_3,
     sparse_aligned_gaussian_hermite_absmean_estimator,
     split_data,
 )
@@ -51,7 +50,6 @@ __all__ = [
     "run_chunk",
     "run_experiment_1",
     "run_experiment_2",
-    "run_experiment_3",
     "sparse_aligned_gaussian_hermite_absmean_estimator",
     "split_data",
     "write_chunk",

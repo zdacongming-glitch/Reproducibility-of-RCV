@@ -65,6 +65,12 @@ CRITERION_BOXPLOT_COLORS = {
     "stochastic": OKABE_ITO["green"],
 }
 
+CONSISTENCY_METHOD_LABELS = {
+    "adversarial": "DACV",
+    "aligned_adversarial": "AACV",
+    "stochastic": "SRCV",
+}
+
 PAPER_GRID_FIGSIZE = (12.0, 10.0)
 PAPER_SINGLE_FIGSIZE = (7.8, 4.8)
 PAPER_BOXPLOT_FIGSIZE = (7.2, 4.5)
@@ -411,6 +417,10 @@ def _criterion_title(criterion: str) -> str:
     return criterion.replace("_", " ").title()
 
 
+def _consistency_method_label(criterion: str) -> str:
+    return CONSISTENCY_METHOD_LABELS[criterion]
+
+
 def _normal_pdf(x: np.ndarray, loc: float, scale: float) -> np.ndarray:
     if scale <= 0.0:
         return np.full_like(x, np.nan, dtype=float)
@@ -705,7 +715,8 @@ def plot_experiment_2(df: pd.DataFrame, output_dir: Path) -> None:
                     linewidth=PAPER_LINEWIDTH,
                     markersize=PAPER_MARKER_SIZE,
                 )
-            ax.set_title(f"{_criterion_title(criterion)} consistency, train ratio = {split_label}")
+            method_label = _consistency_method_label(criterion)
+            ax.set_title(f"{method_label} consistency, train ratio = {split_label}")
             ax.set_ylabel("P(select robust-optimal)")
             ax.set_xlabel("n")
             ax.set_ylim(*_consistency_y_limits(criterion))
@@ -773,74 +784,6 @@ def plot_experiment_2(df: pd.DataFrame, output_dir: Path) -> None:
                 )
 
 
-def plot_experiment_3(df: pd.DataFrame, output_dir: Path) -> None:
-    summary = summarize_results(df)
-    summary["train_ratio_label"] = summary["train_ratio"].map(lambda value: f"{value:.1f}")
-
-    for criterion in ("adversarial", "aligned_adversarial", "stochastic"):
-        criterion_summary = summary.loc[summary["criterion"] == criterion]
-        if criterion_summary.empty:
-            continue
-        for n_value in sorted(criterion_summary["n"].unique()):
-            for split_label in _sorted_split_labels(criterion_summary):
-                subset = criterion_summary.loc[
-                    (criterion_summary["n"] == n_value)
-                    & (criterion_summary["train_ratio_label"] == split_label)
-                ].copy()
-                if subset.empty:
-                    continue
-
-                loss_long = pd.concat(
-                    [
-                        subset.assign(model="A1", mean_loss=subset["mean_loss_a1"]),
-                        subset.assign(model="A2", mean_loss=subset["mean_loss_a2"]),
-                    ],
-                    ignore_index=True,
-                )
-                g = sns.relplot(
-                    data=loss_long,
-                    x="r",
-                    y="mean_loss",
-                    hue="model",
-                    kind="line",
-                    col="beta2",
-                    row="sigma",
-                    palette=MODEL_COLORS,
-                    height=4.0,
-                    aspect=1.25,
-                    facet_kws={"sharey": False},
-                )
-                g.figure.suptitle(
-                    f"Experiment 3 {_criterion_title(criterion)} losses, n={n_value}, train_ratio={split_label}",
-                    y=1.02,
-                )
-                plot_path = output_dir / f"exp3_{criterion}_n{n_value}_trainratio_{split_label}_loss.png"
-                plot_path.parent.mkdir(parents=True, exist_ok=True)
-                g.savefig(plot_path, dpi=220, bbox_inches="tight")
-                plt.close(g.figure)
-
-                g = sns.relplot(
-                    data=subset,
-                    x="r",
-                    y="prob_selected_model_2",
-                    kind="line",
-                    color=SELECTION_COLOR,
-                    col="beta2",
-                    row="sigma",
-                    height=4.0,
-                    aspect=1.25,
-                    facet_kws={"sharey": True},
-                )
-                g.figure.suptitle(
-                    f"Experiment 3 {_criterion_title(criterion)} selection, n={n_value}, train_ratio={split_label}",
-                    y=1.02,
-                )
-                plot_path = output_dir / f"exp3_{criterion}_n{n_value}_trainratio_{split_label}_selection.png"
-                plot_path.parent.mkdir(parents=True, exist_ok=True)
-                g.savefig(plot_path, dpi=220, bbox_inches="tight")
-                plt.close(g.figure)
-
-
 def generate_outputs(raw_path: Path, experiment: str, output_dir: Path, skip_plots: bool = False) -> None:
     df = load_results(raw_path)
     save_summaries(raw_path, output_dir)
@@ -852,8 +795,5 @@ def generate_outputs(raw_path: Path, experiment: str, output_dir: Path, skip_plo
         return
     if experiment == "experiment_2":
         plot_experiment_2(df, plots_dir)
-        return
-    if experiment == "experiment_3":
-        plot_experiment_3(df, plots_dir)
         return
     raise ValueError(f"Unknown experiment '{experiment}'.")
