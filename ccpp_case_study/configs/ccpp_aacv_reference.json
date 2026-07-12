@@ -1,0 +1,102 @@
+{
+  "candidate_order": [
+    "OLS",
+    "RidgeCV",
+    "LassoCV",
+    "KNN",
+    "RandomForest",
+    "HistGB"
+  ],
+  "candidate_protocol": {
+    "factory": "ccpp_repro.experiment.make_models",
+    "hgb_max_iter": 300,
+    "rf_trees": 300
+  },
+  "candidate_summaries": [
+    {
+      "clean_mse_mcse": 0.048452667938305785,
+      "difference_from_winner": 0.0,
+      "difference_mcse": 0.0,
+      "mean_clean_mse": 12.414412687914192,
+      "model": "HistGB",
+      "rank": 1,
+      "split_win_frequency": 1.0,
+      "split_wins": 375
+    },
+    {
+      "clean_mse_mcse": 0.048401425211653706,
+      "difference_from_winner": 3.1173826699998415,
+      "difference_mcse": 0.015306152144635777,
+      "mean_clean_mse": 15.531795357914035,
+      "model": "RandomForest",
+      "rank": 2,
+      "split_win_frequency": 0.0,
+      "split_wins": 0
+    },
+    {
+      "clean_mse_mcse": 0.04720921390072847,
+      "difference_from_winner": 5.0254286438019005,
+      "difference_mcse": 0.022671378158886906,
+      "mean_clean_mse": 17.439841331716092,
+      "model": "KNN",
+      "rank": 3,
+      "split_win_frequency": 0.0,
+      "split_wins": 0
+    },
+    {
+      "clean_mse_mcse": 0.05067090620783886,
+      "difference_from_winner": 8.259659698548598,
+      "difference_mcse": 0.023897920911724317,
+      "mean_clean_mse": 20.67407238646279,
+      "model": "LassoCV",
+      "rank": 4,
+      "split_win_frequency": 0.0,
+      "split_wins": 0
+    },
+    {
+      "clean_mse_mcse": 0.050672487058361776,
+      "difference_from_winner": 8.25967407845145,
+      "difference_mcse": 0.023902524695152597,
+      "mean_clean_mse": 20.67408676636564,
+      "model": "RidgeCV",
+      "rank": 5,
+      "split_win_frequency": 0.0,
+      "split_wins": 0
+    },
+    {
+      "clean_mse_mcse": 0.050677943801930615,
+      "difference_from_winner": 8.25967537887937,
+      "difference_mcse": 0.02390253298203311,
+      "mean_clean_mse": 20.674088066793562,
+      "model": "OLS",
+      "rank": 6,
+      "split_win_frequency": 0.0,
+      "split_wins": 0
+    }
+  ],
+  "data_reuse_disclosure": "The canonical SRCV clean-risk analysis and AACV use the same CCPP case-study dataset. This frozen design decision is not independent external validation and does not identify the true regression function.",
+  "primary_working_reference_learner": "HistGB",
+  "runner_up_working_reference_learner": "RandomForest",
+  "schema_version": 1,
+  "selection_protocol": {
+    "aggregation": "mean_over_predeclared_outer_inner_splits",
+    "criterion": "clean_cv",
+    "radius": 0.0,
+    "source_config": "configs/ccpp_full.json",
+    "source_table": "inner_validation_scores.csv",
+    "split_keys": [
+      "outer",
+      "inner"
+    ],
+    "tie_breaking": "candidate_order"
+  },
+  "selection_status": "frozen_before_aacv_full",
+  "source": {
+    "data_sha256": "CCD490981DB2A2F079963B3D9F0AEA30D9D338900A0285428DFC6385396F4651",
+    "inner_repeats": 15,
+    "outer_repeats": 25,
+    "reference_table_fingerprint": "e86bdb9bf780beb936b855030d3177427add13cdddfab74a9c0b16461f062dfa",
+    "split_count": 375,
+    "srcv_config_fingerprint": "098e5cb0612b7c3a1216649545dd550528191a05dc5c541689044ab03463a24b"
+  }
+}

@@ -87,11 +87,24 @@ def deterministic_seed(base_seed: int, radius_index: int, outer: int, inner: int
     return int(base_seed + 1_000_003 * radius_index + 10_007 * outer + 101 * inner)
 
 
+def make_histgb_model(n_train: int, seed: int, hgb_max_iter: int) -> HistGradientBoostingRegressor:
+    min_leaf_hgb = max(20, math.ceil(0.005 * n_train))
+    return HistGradientBoostingRegressor(
+        max_iter=hgb_max_iter,
+        learning_rate=0.06,
+        max_leaf_nodes=15,
+        min_samples_leaf=max(30, min_leaf_hgb),
+        early_stopping=True,
+        validation_fraction=0.1,
+        n_iter_no_change=15,
+        random_state=seed,
+    )
+
+
 def make_models(n_train: int, seed: int, rf_trees: int, hgb_max_iter: int) -> dict[str, object]:
     n_features = len(FEATURE_COLUMNS)
     knn_neighbors = int(np.clip(math.ceil(n_train ** (4.0 / (4.0 + n_features))), 25, 150))
     min_leaf_rf = max(5, math.ceil(0.005 * n_train))
-    min_leaf_hgb = max(20, math.ceil(0.005 * n_train))
     ridge_alphas = n_train * np.logspace(-6, 2, 49)
     return {
         "OLS": LinearRegression(),
@@ -113,16 +126,7 @@ def make_models(n_train: int, seed: int, rf_trees: int, hgb_max_iter: int) -> di
             random_state=seed,
             n_jobs=-1,
         ),
-        "HistGB": HistGradientBoostingRegressor(
-            max_iter=hgb_max_iter,
-            learning_rate=0.06,
-            max_leaf_nodes=15,
-            min_samples_leaf=max(30, min_leaf_hgb),
-            early_stopping=True,
-            validation_fraction=0.1,
-            n_iter_no_change=15,
-            random_state=seed,
-        ),
+        "HistGB": make_histgb_model(n_train, seed, hgb_max_iter),
     }
 
 

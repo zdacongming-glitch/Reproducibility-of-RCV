@@ -1,30 +1,84 @@
-# Python caches and test artifacts
+# Repository policy
+# Track source code, configs, tests, documentation, and small reproducibility
+# inputs by default. Ignore only local state and reproducible build/run outputs.
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local agent/tooling state and secrets
+.agents/
+.codex/
+.env
+.env.*
+!.env.example
+
+# Python caches, test artifacts, and coverage reports
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
 
-# Local agent/tooling state
-.agents/
-
-# Local Python environments
+# Local Python environments and package build products
 .venv/
 venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
 
-# Nested-linear generated outputs
+# Notebook and runtime artifacts
+.ipynb_checkpoints/
+*.log
+*.tmp
+*.temp
+*.pid
+
+# LaTeX build artifacts (keep .tex sources tracked)
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+/main.pdf
+
+# Nested-linear experiment outputs
 nested_linear_example/outputs/
 nested_linear_example/aligned_smoke/
 nested_linear_example/smoke_outputs/
 nested_linear_example/outputs_rerun/
 
-# Neural-network generated outputs
-neaural_network_experiment/outputs/
-neaural_network_experiment/smoke_outputs/
-neaural_network_experiment/outputs_rerun/
-neaural_network_experiment/.venv/
-neaural_network_experiment/**/*.pt
-neaural_network_experiment/**/*.pth
-neaural_network_experiment/**/*.ckpt
+# Neural-network experiment outputs and model checkpoints
+neural_network_experiment/outputs/
+neural_network_experiment/smoke_outputs/
+neural_network_experiment/outputs_rerun/
+neural_network_experiment/**/*.pt
+neural_network_experiment/**/*.pth
+neural_network_experiment/**/*.ckpt
 
-# CCPP rerun outputs
-ccpp_case_study/outputs/full_run_rerun/
-ccpp_case_study/outputs/full_figures_rerun/
+# CCPP experiment outputs, figures, and resumable shards
+ccpp_case_study/outputs/
+ccpp_case_study/aacv output/

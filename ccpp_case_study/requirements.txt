@@ -2,5 +2,7 @@ matplotlib
 numpy
 openpyxl
 pandas
+pytest
 scikit-learn
+scipy
 tqdm

@@ -1,0 +1,240 @@
+{
+  "name": "ccpp_aacv_medium_reproduction",
+  "data": {
+    "path": "data/Folds5x2_pp.xlsx",
+    "sha256": "CCD490981DB2A2F079963B3D9F0AEA30D9D338900A0285428DFC6385396F4651",
+    "source_url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00294/CCPP.zip",
+    "required_columns": [
+      "AT",
+      "V",
+      "AP",
+      "RH",
+      "PE"
+    ],
+    "expected_rows": 9568
+  },
+  "aacv_experiment": {
+    "radii": [
+      0,
+      0.0025,
+      0.005,
+      0.01,
+      0.05,
+      0.08,
+      0.1,
+      0.125,
+      0.15,
+      0.3,
+      0.45,
+      0.475,
+      0.5,
+      0.525,
+      0.6
+    ],
+    "outer_repeats": 1,
+    "inner_repeats": 1,
+    "test_size": 0.2,
+    "validation_fraction_of_pool": 0.25,
+    "base_seed": 20260521
+  },
+  "models": {
+    "candidate_order": [
+      "OLS",
+      "RidgeCV",
+      "LassoCV",
+      "KNN",
+      "RandomForest",
+      "HistGB"
+    ],
+    "rf_trees": 300,
+    "hgb_max_iter": 300
+  },
+  "working_error": {
+    "assumption": "gaussian_homoskedastic_working_law",
+    "reference_spec": "configs/ccpp_aacv_reference.json",
+    "reference_protocol": {
+      "crossfit_folds": 5,
+      "rf_trees": 300,
+      "hgb_max_iter": 300
+    },
+    "variance_floor_ratio": 1e-08,
+    "clipping": "none",
+    "tong_wang": {
+      "neighbors": 20
+    },
+    "fan_yao": {
+      "neighbors": 200,
+      "batch_rows": 512
+    },
+    "analysis_variants": [
+      {
+        "name": "primary_histgb_oof_j2_b6",
+        "role": "primary",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "oof_residual_histgb",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "reference_ols_oof_j2_b6",
+        "role": "reference_sensitivity",
+        "working_reference_learner": "OLS",
+        "scale_estimator": "oof_residual_ols",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "reference_ridgecv_oof_j2_b6",
+        "role": "reference_sensitivity",
+        "working_reference_learner": "RidgeCV",
+        "scale_estimator": "oof_residual_ridgecv",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "reference_lassocv_oof_j2_b6",
+        "role": "reference_sensitivity",
+        "working_reference_learner": "LassoCV",
+        "scale_estimator": "oof_residual_lassocv",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "reference_knn_oof_j2_b6",
+        "role": "reference_sensitivity",
+        "working_reference_learner": "KNN",
+        "scale_estimator": "oof_residual_knn",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "reference_randomforest_oof_j2_b6",
+        "role": "reference_sensitivity",
+        "working_reference_learner": "RandomForest",
+        "scale_estimator": "oof_residual_randomforest",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "scale_tong_wang_j2_b6",
+        "role": "scale_sensitivity",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "tong_wang",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "scale_fan_yao_j2_b6",
+        "role": "scale_sensitivity",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "fan_yao_histgb",
+        "hermite_degree": 2,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "hermite_histgb_oof_j1_b6",
+        "role": "hermite_sensitivity",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "oof_residual_histgb",
+        "hermite_degree": 1,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "hermite_histgb_oof_j3_b6",
+        "role": "hermite_sensitivity",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "oof_residual_histgb",
+        "hermite_degree": 3,
+        "envelope_multiplier": 6
+      },
+      {
+        "name": "hermite_histgb_oof_j2_b4",
+        "role": "hermite_sensitivity",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "oof_residual_histgb",
+        "hermite_degree": 2,
+        "envelope_multiplier": 4
+      },
+      {
+        "name": "hermite_histgb_oof_j2_b8",
+        "role": "hermite_sensitivity",
+        "working_reference_learner": "HistGB",
+        "scale_estimator": "oof_residual_histgb",
+        "hermite_degree": 2,
+        "envelope_multiplier": 8
+      }
+    ]
+  },
+  "optimizer": {
+    "validation": {
+      "sobol_starts": 8,
+      "step_fractions": [
+        0.5,
+        0.25,
+        0.125,
+        0.0625
+      ],
+      "prediction_chunk_rows": 2048
+    },
+    "evaluation": {
+      "sobol_starts": 32,
+      "step_fractions": [
+        0.5,
+        0.25,
+        0.125,
+        0.0625,
+        0.03125,
+        0.015625
+      ],
+      "prediction_chunk_rows": 2048
+    },
+    "audit": {
+      "enabled": true,
+      "max_observations": 16,
+      "sobol_multiplier": 2,
+      "minimum_step_fraction": 0.0078125
+    },
+    "algorithm": "multipath_strict_envelope_v1",
+    "retained_paths": 4,
+    "path_calibration": {
+      "enabled": false,
+      "path_counts": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "radii": [],
+      "score_relative_tolerance": 0.005,
+      "extrema_p99_response_sd_tolerance": 0.01,
+      "require_selection_agreement": true
+    }
+  },
+  "mismatch": {
+    "output_subdir": "aacv_radius_mismatch",
+    "representative_eval_radii": [
+      0.01,
+      0.1,
+      0.5,
+      0.6
+    ],
+    "clean_cv_tolerance": 1e-10
+  },
+  "figures": {
+    "main_stem": "fig_ccpp_aacv_case_study_main",
+    "mismatch_stem": "fig_ccpp_aacv_radius_mismatch",
+    "diagnostics_stem": "fig_ccpp_aacv_working_error_diagnostics",
+    "sensitivity_stem": "fig_ccpp_aacv_sensitivity",
+    "formats": [
+      "pdf",
+      "png"
+    ],
+    "transition_window": [
+      0.4,
+      0.6
+    ]
+  },
+  "verification": {
+    "float_tolerance": 1e-08
+  }
+}
