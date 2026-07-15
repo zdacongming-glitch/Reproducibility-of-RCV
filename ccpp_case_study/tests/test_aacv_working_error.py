@@ -195,3 +195,32 @@ def test_structural_scale_estimators_are_deterministic_and_positive() -> None:
     assert fan_first.sigma2 > 0
     assert tong_first.diagnostics["pair_count"] > len(x)
     assert "negative_local_rate" in fan_first.diagnostics
+
+
+def test_fan_yao_uses_numpy_1_compatible_batched_solve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rng = np.random.default_rng(92)
+    x = rng.normal(size=(40, 4))
+    residual = rng.normal(size=len(x))
+    y = x[:, 0] + residual
+    solve = np.linalg.solve
+    solve_shapes: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
+
+    def tracking_solve(normal: np.ndarray, right: np.ndarray) -> np.ndarray:
+        solve_shapes.append((normal.shape, right.shape))
+        return solve(normal, right)
+
+    monkeypatch.setattr(working_error.np.linalg, "solve", tracking_solve)
+    estimate_fan_yao_scale(
+        x,
+        y,
+        residual,
+        neighbors=12,
+        batch_rows=17,
+        variance_floor_ratio=1e-8,
+    )
+
+    assert solve_shapes
+    assert all(normal[-2:] == (5, 5) for normal, _right in solve_shapes)
+    assert all(right[-2:] == (5, 1) for _normal, right in solve_shapes)

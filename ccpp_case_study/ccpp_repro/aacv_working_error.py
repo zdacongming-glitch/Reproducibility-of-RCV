@@ -368,7 +368,8 @@ def estimate_fan_yao_scale(
         ridge = np.maximum(slope_trace, 1.0) * 1e-10
         for coordinate in range(1, normal.shape[1]):
             normal[:, coordinate, coordinate] += ridge
-        coefficients = np.linalg.solve(normal, right)
+        # Keep the batched right-hand side explicit for NumPy 1.x and 2.x.
+        coefficients = np.linalg.solve(normal, right[..., None])[..., 0]
         local_variance[start:stop] = coefficients[:, 0]
     if not np.isfinite(local_variance).all():
         raise FloatingPointError("Fan-Yao local variance estimates are non-finite")
