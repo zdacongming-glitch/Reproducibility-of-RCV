@@ -193,57 +193,69 @@ sensitivity analyses; neither is labeled as a ground-truth variance estimate.
 Hermite sensitivities reuse the same fitted candidates and adversarial
 extrema.
 
-### Continuous adversarial optimization
+### Finite radius-specific attack sets
 
-The perturbation set is the standardized continuous box
-`delta in [-r,r]^4`. OLS, RidgeCV, and LassoCV extrema are solved exactly.
-KNN, RandomForest, and HistGB use deterministic batched multi-start coordinate
-pattern search. Starts include the center, all 16 corners, eight signed axis
-endpoints, and nested scrambled Sobol points.
+AACV no longer optimizes over the standardized continuous box. It evaluates a
+deterministic finite set. At radius zero,
 
-For each observation and direction, the primary search retains `K` independent
-paths, refines every path separately, and takes their strict envelope. Every
-path keeps its historical best value, so later step sizes cannot degrade it.
-The stronger audit inherits all primary paths and extrema, adds the next Sobol
-points from the same scrambled sequence, continues to step `1/128`, and takes
-an explicit envelope with the primary result. Therefore a stronger maximum
-cannot decrease and a stronger minimum cannot increase.
+$$
+A(0)=\{0\}.
+$$
 
-The full primary budgets are:
+For every configured $r>0$,
 
-```text
-validation: 8 Sobol starts; steps 1/2, 1/4, 1/8, 1/16
-evaluation: 32 Sobol starts; steps 1/2, 1/4, 1/8, 1/16, 1/32, 1/64
-```
+$$
+A(r)=\{0\}\cup\{r s:s\in\{-1,+1\}^4\}.
+$$
 
-The Smoke run derives nested `K=1,2,3,4` envelopes from one four-path search.
-It retains `K=3` only when all predeclared selection, score, and extrema gates
-pass; otherwise the checked-in Medium and Full protocols must use `K=4`. The recorded Smoke gate failed the extrema thresholds, so all three checked-in configurations are frozen at `K=4`.
+The first point is the unperturbed observation. The remaining 16 points are
+the lexicographically ordered corners of the current radius-$r$ cube. All six
+candidate models use this same definition. Validation and evaluation use
+identical attack sets and exact finite enumeration; there are no Sobol starts,
+coordinate-refinement paths, model-specific budgets, or stronger-search
+audits.
+
+The sets are radius-specific rather than cumulative. Adding an intermediate
+radius does not alter extrema or AACV scores at any existing radius. The result
+should therefore be described as exact robustness over the declared 17-point
+set, not robustness over the continuous cube $[-r,r]^4$.
 
 ## AACV configurations
 
 `configs/ccpp_aacv_smoke.json` uses radii 0, 0.05, 0.15, 0.5, and 1.0,
-one outer repeat, one inner repeat, and reduced candidate/optimizer budgets.
-It writes the path-calibration detail and decision tables. The working-reference
-RF and HistGB protocols remain fixed at 300 trees/iterations.
+one outer repeat, one inner repeat, and reduced candidate fitting budgets.
+The working-reference RF and HistGB protocols remain fixed at 300
+trees/iterations.
 
-Medium and Full share this 15-point radius grid. It is concentrated around the
-pilot switching regions near 0, 0.1, and 0.5, with sparse anchors elsewhere:
+`configs/ccpp_aacv_medium.json` uses one outer and one inner split, full
+candidate fitting settings, and 54 radii:
 
-```text
-0, 0.0025, 0.005, 0.01, 0.05,
-0.08, 0.10, 0.125, 0.15,
-0.30,
-0.45, 0.475, 0.50, 0.525, 0.60
-```
+~~~text
+0, 0.0025, 0.005, 0.01,
+0.02, 0.04, ..., 0.98, 1.00
+~~~
 
-`configs/ccpp_aacv_medium.json` uses one outer and one inner split while
-retaining the Full candidate models and primary attack budgets. It is intended
-for a lower-cost exploratory run and does not provide stable Monte Carlo
-standard errors. `configs/ccpp_aacv_full.json` uses the robust design of 20
-outer by 3 inner repeats for the final repeated experiment. The 20 outer
-replications give selected-model frequencies a 5-percentage-point resolution
-and a worst-case binomial Monte Carlo standard error of about 0.112.
+It is a dense exploratory scan for model-selection tradeoff and switching
+radii. It does not provide stable Monte Carlo standard errors.
+
+`configs/ccpp_aacv_full.json` uses a 37-point grid that keeps the three
+observed switching regions dense, adds moderate coverage between them, and
+ends at 0.90:
+
+~~~text
+0, 0.0025, 0.005, 0.0075, 0.0085, 0.01, 0.02,
+0.04, 0.05, 0.055, 0.06, 0.065, 0.07, 0.075, 0.08, 0.10,
+0.15, 0.22, 0.30, 0.40, 0.50, 0.60, 0.68,
+0.70, 0.705, 0.71, 0.715, 0.72, 0.725, 0.73, 0.74,
+0.75, 0.76, 0.78, 0.82, 0.86, 0.90
+~~~
+
+Full uses the strengthened protocol of 30 outer by 3 inner repeats. The 30
+outer replications give selected-model frequencies about a 3.33-percentage-
+point resolution and a worst-case binomial Monte Carlo standard error of about
+0.091. Scaling the measured 30-radius local run to 36 radii and 30 outer
+replications gives an estimated runtime of roughly 8-10 hours on the same
+workstation.
 
 ## AACV commands
 
@@ -289,7 +301,7 @@ Each completed outer replication is written atomically under `partials/`.
 Resume an interrupted run with the same command plus `--resume`. A nonempty
 output directory fails without `--resume`; resume also validates the reference,
 configuration, scientific implementation version, attack algorithm, and shard
-schema. Shards produced by the former single-path optimizer cannot be resumed.
+schema. Schema-v2 continuous-optimizer shards cannot be resumed under schema v3.
 
 Plot and verify existing outputs:
 
@@ -329,9 +341,7 @@ aacv_selection_frequencies.csv
 aacv_candidate_test_scores.csv
 working_error_selection_switches.csv
 working_error_sensitivity_summary.csv
-attack_diagnostics.csv
-attack_path_calibration.csv
-attack_path_calibration_summary.csv
+attack_set_diagnostics.csv
 aacv_radius_mismatch/
 partials/
 run_manifest.json
@@ -353,9 +363,9 @@ fig_ccpp_aacv_sensitivity.pdf/png
 ```
 
 `run_manifest.json` records resolved settings, the reference specification and
-fingerprint, data/source hashes, split and optimizer seeds, fixed path count,
-calibration decision, attack/scientific schema versions, package versions,
-available Git commit/status, and scientific-status qualifications.
+fingerprint, data/source hashes, split seeds, the exact finite attack-set
+definition and fingerprint, attack/scientific schema versions, package
+versions, available Git commit/status, and scientific-status qualifications.
 
 ## Git policy
 

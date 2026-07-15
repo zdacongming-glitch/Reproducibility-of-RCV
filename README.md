@@ -358,17 +358,28 @@ external validation.
 
 Within each AACV inner training split, five-fold fold-local cross-fitting
 constructs honest OOF residuals. The primary Gaussian-Hermite correction uses
-the HistGB OOF residual scale, J=2, B=6 times that scale, and no clipping.
+the HistGB OOF residual scale, $J=2$, $B=6\widehat{\sigma}$, and no clipping.
 Predeclared sensitivities cover all six working reference learners, two
-structural scale estimators, and four Hermite settings. Linear-model box
-extrema are exact; KNN, RandomForest, and HistGB use deterministic multipath
-continuous optimization with a strict inherited stronger envelope. The predeclared Smoke gate selected and froze `K=4`.
+structural scale estimators, and four Hermite settings.
+
+AACV uses a finite attack set in the standardized four-dimensional feature
+space. For $r=0$, the set contains only the unperturbed observation. For every
+$r>0$,
+
+$$
+A(r)=\{0\}\cup\{r s:s\in\{-1,+1\}^4\}.
+$$
+
+Thus each nonzero radius uses exactly 17 points: the origin and the 16 corners
+of the radius-$r$ cube. Extrema are exact over this finite set for all six
+candidate models. They are not extrema over the continuous cube
+$[-r,r]^4$. Validation and evaluation use the same attack set, and adding
+another configured radius does not change results at existing radii.
 
 The held-out AACV best candidate is a qualified diagnostic benchmark; it does
 not use the unknown regression function. See `ccpp_case_study/README.md`,
 `ccpp_case_study/AACV_WORKING_ERROR_GUIDELINE.md`, and
-`ccpp_case_study/AACV_IMPLEMENTATION_PLAN.md`, and
-`ccpp_case_study/AACV_MULTIPATH_MEDIUM_PLAN.md` for the complete assumptions.
+`ccpp_case_study/AACV_IMPLEMENTATION_PLAN.md` for the complete assumptions.
 
 AACV smoke run:
 
@@ -378,18 +389,32 @@ python -m ccpp_repro run-aacv --config configs/ccpp_aacv_smoke.json --output-dir
 python -m ccpp_repro verify-aacv --config configs/ccpp_aacv_smoke.json --run-dir outputs/aacv_smoke --figure-dir outputs/aacv_smoke_figures
 ~~~
 
-AACV Medium run (31 radii, one outer and one inner split, Full attack budget):
+AACV Medium run:
 
 ~~~bash
 python -m ccpp_repro run-aacv --config configs/ccpp_aacv_medium.json --output-dir outputs/aacv_medium --figure-dir outputs/aacv_medium_figures
 python -m ccpp_repro verify-aacv --config configs/ccpp_aacv_medium.json --run-dir outputs/aacv_medium --figure-dir outputs/aacv_medium_figures
 ~~~
 
-The Medium and Full configurations share 31 radii from 0 to 1. Full uses 10
-outer repeats and 5 inner repeats. Interrupted runs can be resumed with the
-same command plus --resume.
-The separate plot-aacv and verify-aacv commands regenerate and validate its
-four figure families without invoking SRCV.
+Medium uses one outer and one inner split with 54 radii: $0$, $0.0025$,
+$0.005$, $0.01$, followed by $0.02$ through $1.00$ in increments of $0.02$.
+It is an exploratory run for locating model-selection tradeoff radii, not a
+source of stable Monte Carlo standard errors.
+
+AACV Full run:
+
+~~~bash
+python -m ccpp_repro run-aacv --config configs/ccpp_aacv_full.json --output-dir outputs/aacv_full --figure-dir outputs/aacv_full_figures
+python -m ccpp_repro verify-aacv --config configs/ccpp_aacv_full.json --run-dir outputs/aacv_full --figure-dir outputs/aacv_full_figures
+~~~
+
+Full uses the approved 37-radius grid from $0$ to $0.9$ and the strengthened
+protocol of 30 outer by 3 inner repetitions. Interrupted runs can be resumed
+with the same command plus `--resume`. Schema-v2 continuous-optimizer shards
+cannot be resumed under the finite-attack-set schema v3.
+
+The separate `plot-aacv` and `verify-aacv` commands regenerate and validate
+the four AACV figure families without invoking SRCV.
 
 ## Notes
 

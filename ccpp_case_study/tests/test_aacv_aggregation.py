@@ -16,7 +16,6 @@ from ccpp_repro.aacv_experiment import (
     aacv_config_from_dict,
     experiment_fingerprint,
     run_aacv_and_write,
-    summarize_attack_path_calibration,
 )
 from ccpp_repro.aacv_mismatch import (
     _check_matched_diagonal,
@@ -120,9 +119,7 @@ def test_aacv_config_and_srcv_histgb_factory_remain_fixed() -> None:
     assert resolved.candidate_order == CANDIDATES
     assert resolved.analysis_variants == required_analysis_variants(CANDIDATES)
     assert resolved.attack_algorithm == ATTACK_ALGORITHM
-    assert resolved.retained_paths == 4
-    assert resolved.path_calibration.enabled
-    assert resolved.path_calibration.path_counts == (1, 2, 3, 4)
+    assert resolved.prediction_chunk_rows == 2048
     direct = make_histgb_model(1000, 17, 30)
     from_factory = make_models(1000, 17, rf_trees=10, hgb_max_iter=30)["HistGB"]
     assert direct.get_params() == from_factory.get_params()
@@ -157,8 +154,8 @@ def test_checked_in_reference_spec_is_frozen_and_valid() -> None:
     ),
     [
         ("configs/ccpp_aacv_smoke.json", 5, 1, 1, 360, 120, 120),
-        ("configs/ccpp_aacv_medium.json", 15, 1, 1, 1080, 360, 360),
-        ("configs/ccpp_aacv_full.json", 15, 20, 3, 64800, 21600, 7200),
+        ("configs/ccpp_aacv_medium.json", 54, 1, 1, 3888, 1296, 1296),
+        ("configs/ccpp_aacv_full.json", 37, 30, 3, 239760, 79920, 26640),
     ],
 )
 def test_protocol_row_formulas(
@@ -180,40 +177,72 @@ def test_protocol_row_formulas(
     assert radius_count * outer * variants * 2 == expected_outer_rows
 
 
-def test_medium_and_full_share_the_approved_radius_grid() -> None:
+def test_medium_and_full_radius_protocols() -> None:
     medium = aacv_config_from_dict(
         load_config("configs/ccpp_aacv_medium.json"), progress=False
     )
     full = aacv_config_from_dict(
         load_config("configs/ccpp_aacv_full.json"), progress=False
     )
-    assert medium.radii == full.radii
-    assert medium.radii == (
+    expected_medium = (
         0.0,
         0.0025,
         0.005,
         0.01,
-        0.05,
-        0.08,
-        0.1,
-        0.125,
-        0.15,
-        0.3,
-        0.45,
-        0.475,
-        0.5,
-        0.525,
-        0.6,
+        *(0.02 * index for index in range(1, 51)),
     )
+    expected_full = (
+        0.0,
+        0.0025,
+        0.005,
+        0.0075,
+        0.0085,
+        0.01,
+        0.02,
+        0.04,
+        0.05,
+        0.055,
+        0.06,
+        0.065,
+        0.07,
+        0.075,
+        0.08,
+        0.10,
+        0.15,
+        0.22,
+        0.30,
+        0.40,
+        0.50,
+        0.60,
+        0.68,
+        0.70,
+        0.705,
+        0.71,
+        0.715,
+        0.72,
+        0.725,
+        0.73,
+        0.74,
+        0.75,
+        0.76,
+        0.78,
+        0.82,
+        0.86,
+        0.90,
+    )
+    assert len(medium.radii) == 54
+    assert medium.radii == pytest.approx(expected_medium, rel=0, abs=1e-12)
+    assert medium.radii[-1] == 1.0
+    assert len(full.radii) == 37
+    assert full.radii == pytest.approx(expected_full, rel=0, abs=1e-12)
+    assert full.radii[-1] == 0.9
     assert medium.outer_repeats == medium.inner_repeats == 1
-    assert full.outer_repeats == 20
+    assert full.outer_repeats == 30
     assert full.inner_repeats == 3
     assert medium.rf_trees == full.rf_trees == 300
     assert medium.hgb_max_iter == full.hgb_max_iter == 300
-    assert medium.validation_budget == full.validation_budget
-    assert medium.evaluation_budget == full.evaluation_budget
-    assert medium.audit_max_observations == 16
-    assert full.audit_max_observations == 64
+    assert medium.attack_algorithm == full.attack_algorithm == ATTACK_ALGORITHM
+    assert medium.prediction_chunk_rows == full.prediction_chunk_rows == 2048
 
 
 def test_scientific_schema_and_attack_config_change_fingerprint() -> None:
@@ -221,39 +250,13 @@ def test_scientific_schema_and_attack_config_change_fingerprint() -> None:
     _path, reference = load_reference_spec(config)
     baseline = experiment_fingerprint(config, reference)
     changed = copy.deepcopy(config)
-    changed["optimizer"]["retained_paths"] = 3
+    changed["attack_set"]["prediction_chunk_rows"] = 1024
     assert experiment_fingerprint(changed, reference) != baseline
+    assert AACV_SCIENTIFIC_SCHEMA_VERSION == 3
 
 
-def test_strict_path_calibration_gate_selects_three_or_four() -> None:
-    config = aacv_config_from_dict(
-        load_config("configs/ccpp_aacv_smoke.json"), progress=False
-    )
-    passing = pd.DataFrame(
-        [
-            {
-                "stage": "validation",
-                "path_count": 3,
-                "selection_matches_reference": True,
-                "score_symmetric_relative_gap": 0.001,
-                "maximum_outward_gap_p99_response_sd": 0.005,
-                "minimum_outward_gap_p99_response_sd": 0.004,
-            },
-            {
-                "stage": "evaluation",
-                "path_count": 3,
-                "selection_matches_reference": None,
-                "score_symmetric_relative_gap": 0.002,
-                "maximum_outward_gap_p99_response_sd": 0.006,
-                "minimum_outward_gap_p99_response_sd": 0.003,
-            },
-        ]
-    )
-    summary = summarize_attack_path_calibration(passing, config).iloc[0]
-    assert bool(summary["calibration_passed"])
-    assert int(summary["recommended_path_count"]) == 3
-    failing = passing.copy()
-    failing.loc[0, "score_symmetric_relative_gap"] = 0.006
-    summary = summarize_attack_path_calibration(failing, config).iloc[0]
-    assert not bool(summary["calibration_passed"])
-    assert int(summary["recommended_path_count"]) == 4
+def test_legacy_optimizer_configuration_is_rejected() -> None:
+    config = load_config("configs/ccpp_aacv_smoke.json")
+    config["optimizer"] = {"algorithm": "multipath_strict_envelope_v1"}
+    with pytest.raises(ValueError, match="Legacy AACV optimizer"):
+        aacv_config_from_dict(config, progress=False)

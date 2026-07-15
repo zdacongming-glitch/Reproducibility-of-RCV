@@ -11,6 +11,7 @@ import pandas as pd
 from .aacv_experiment import (
     AACV_SCIENTIFIC_SCHEMA_VERSION,
     ATTACK_ALGORITHM,
+    _attack_set_manifest,
     _source_hashes,
     aacv_config_from_dict,
     experiment_fingerprint,
@@ -147,9 +148,7 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
             "scale_estimator_diagnostics",
             "residual_covariate_diagnostics",
             "residual_covariate_bins",
-            "attack_diagnostics",
-            "attack_path_calibration",
-            "attack_path_calibration_summary",
+            "attack_set_diagnostics",
             "aacv_summary_by_radius",
             "aacv_selection_frequencies",
             "aacv_candidate_test_scores",
@@ -166,18 +165,6 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
     variant_count = len(experiment.analysis_variants)
     reference_count = model_count
     scale_count = model_count + 2
-    nonzero_radii = sum(not np.isclose(radius, 0.0) for radius in experiment.radii)
-    calibration_rows = (
-        outer_count
-        * inner_count
-        * len(experiment.path_calibration.radii)
-        * 2
-        * model_count
-        * variant_count
-        * len(experiment.path_calibration.path_counts)
-        if experiment.path_calibration.enabled
-        else 0
-    )
 
     expected_rows = {
         "inner_aacv_scores": radius_count
@@ -211,13 +198,7 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
         * reference_count
         * len(FEATURE_COLUMNS)
         * 10,
-        "attack_diagnostics": (
-            outer_count * inner_count * nonzero_radii * 3 * 2
-            if experiment.audit_enabled
-            else 0
-        ),
-        "attack_path_calibration": calibration_rows,
-        "attack_path_calibration_summary": 1,
+        "attack_set_diagnostics": radius_count,
         "aacv_summary_by_radius": radius_count * variant_count * 2,
         "aacv_selection_frequencies": radius_count * variant_count * 2 * model_count,
         "aacv_candidate_test_scores": radius_count * variant_count * model_count,
@@ -270,17 +251,9 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
         errors,
     )
     _check_unique(
-        files["attack_path_calibration"],
-        [
-            "outer",
-            "inner",
-            "stage",
-            "radius",
-            "model",
-            "analysis_variant",
-            "path_count",
-        ],
-        "attack_path_calibration",
+        files["attack_set_diagnostics"],
+        ["radius_index", "radius"],
+        "attack_set_diagnostics",
         errors,
     )
 
@@ -374,52 +347,44 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
         if not np.isfinite(covariates[relationship_columns].to_numpy(float)).all():
             errors.append("residual-covariate diagnostics contain non-finite values")
 
-    attacks = files["attack_diagnostics"]
-    if not attacks.empty:
-        if not attacks["strict_envelope_passed"].astype(bool).all():
-            errors.append("one or more strict-envelope attack audits failed")
-        if (attacks[["maximum_gain_min", "minimum_gain_min"]] < -tolerance).any().any():
-            errors.append("stronger attack audit worsened a primary extremum")
-        if set(attacks["attack_algorithm"].astype(str)) != {ATTACK_ALGORITHM}:
-            errors.append("attack diagnostics record the wrong algorithm")
-        if not attacks["primary_path_count"].eq(experiment.retained_paths).all():
-            errors.append("attack diagnostics record the wrong primary path count")
-
-    calibration = files["attack_path_calibration"]
-    calibration_summary = files["attack_path_calibration_summary"]
-    if experiment.path_calibration.enabled:
-        if calibration.empty:
-            errors.append("enabled path calibration has no detail rows")
-        else:
-            if set(calibration["path_count"].astype(int)) != {1, 2, 3, 4}:
-                errors.append("path calibration does not cover K=1,2,3,4")
-            if set(calibration["stage"].astype(str)) != {"validation", "evaluation"}:
-                errors.append("path calibration does not cover both stages")
-            actual_radii = sorted(calibration["radius"].astype(float).unique())
-            if len(actual_radii) != len(
-                experiment.path_calibration.radii
-            ) or not np.allclose(
-                actual_radii,
-                experiment.path_calibration.radii,
-                atol=tolerance,
-                rtol=0,
-            ):
-                errors.append("path calibration radii do not match the configuration")
-            gap_columns = [
-                "score_symmetric_relative_gap",
-                "maximum_outward_gap_p99_response_sd",
-                "minimum_outward_gap_p99_response_sd",
-            ]
-            if (calibration[gap_columns] < -tolerance).any().any():
-                errors.append("path calibration contains negative gap diagnostics")
-    elif not calibration.empty:
-        errors.append("disabled path calibration produced detail rows")
-    if not calibration_summary.empty:
-        row = calibration_summary.iloc[0]
-        if int(row["configured_path_count"]) != experiment.retained_paths:
-            errors.append("path calibration summary records the wrong configured K")
-        if not bool(row["configured_path_count_matches_recommendation"]):
-            errors.append("configured K does not match the strict calibration decision")
+    attack_sets = files["attack_set_diagnostics"]
+    if not attack_sets.empty:
+        ordered = attack_sets.sort_values("radius_index").reset_index(drop=True)
+        if set(ordered["attack_algorithm"].astype(str)) != {ATTACK_ALGORITHM}:
+            errors.append("attack-set diagnostics record the wrong algorithm")
+        if not ordered["construction_passed"].astype(bool).all():
+            errors.append("one or more finite attack sets failed construction checks")
+        if not ordered["origin_present"].astype(bool).all():
+            errors.append("one or more finite attack sets omit the origin")
+        if not ordered["corners_on_current_radius"].astype(bool).all():
+            errors.append("one or more attack corners are on the wrong radius")
+        if not ordered["within_current_radius"].astype(bool).all():
+            errors.append("one or more attack points exceed the configured radius")
+        if not ordered["dimension"].eq(len(FEATURE_COLUMNS)).all():
+            errors.append("attack-set diagnostics record the wrong dimension")
+        if not np.allclose(
+            ordered["radius"].to_numpy(float),
+            experiment.radii,
+            atol=tolerance,
+            rtol=0,
+        ):
+            errors.append("attack-set diagnostic radii do not match the configuration")
+        expected_corners = np.asarray(
+            [0] + [2 ** len(FEATURE_COLUMNS)] * (radius_count - 1), dtype=int
+        )
+        expected_points = 1 + expected_corners
+        if not np.array_equal(ordered["corner_count"].to_numpy(int), expected_corners):
+            errors.append("attack-set corner counts are incorrect")
+        if not np.array_equal(
+            ordered["expected_unique_point_count"].to_numpy(int), expected_points
+        ):
+            errors.append("expected attack-set point counts are incorrect")
+        if not np.array_equal(
+            ordered["actual_unique_point_count"].to_numpy(int), expected_points
+        ):
+            errors.append("actual attack-set point counts are incorrect")
+        if not ordered["origin_count"].eq(1).all():
+            errors.append("each finite attack set must contain the origin exactly once")
 
     output_reference_json = run_dir / "reference_selection.json"
     if not output_reference_json.exists():
@@ -480,7 +445,6 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
             "outer_split",
             "inner_split",
             "working_reference_crossfit",
-            "attack",
         }:
             errors.append("run manifest seed derivation is incomplete")
         git = manifest.get("git", {})
@@ -492,19 +456,16 @@ def verify_aacv_run(config: dict[str, Any], run_dir: Path) -> list[str]:
             "working_reference_is_true_regression_function": False,
             "working_error_is_physical_noise_law": False,
             "working_scales_use_inner_training_only": True,
-            "nonlinear_extrema_are_numerical": True,
-            "primary_attack_uses_multiple_independent_paths": True,
-            "stronger_attack_inherits_primary_envelope": True,
-            "stronger_extrema_cannot_degrade_primary": True,
+            "extrema_are_exact_over_configured_finite_attack_set": True,
+            "attack_sets_are_radius_specific_and_grid_independent": True,
+            "continuous_cube_extrema_are_computed": False,
+            "validation_and_evaluation_share_attack_set": True,
             "heldout_best_uses_unknown_truth": False,
         }
         if manifest.get("scientific_status") != expected_status:
             errors.append("run manifest scientific-status declaration is incorrect")
-        manifest_calibration = manifest.get("attack_path_calibration", {})
-        if int(manifest_calibration.get("configured_path_count", -1)) != (
-            experiment.retained_paths
-        ):
-            errors.append("run manifest omits the configured attack path count")
+        if manifest.get("attack_set") != _attack_set_manifest(experiment):
+            errors.append("run manifest attack-set definition is incorrect")
         if manifest.get("data_reuse_disclosure") != reference_spec.get(
             "data_reuse_disclosure"
         ):

@@ -85,7 +85,7 @@ def draw_aacv_case_study_main(
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(7.25, 4.85))
-    ax_full, ax_zoom, ax_match, ax_excess = axes.ravel()
+    ax_full, ax_transition_panel, ax_match, ax_excess = axes.ravel()
     _plot_candidate_curves(ax_full, shown)
     ax_full.set_xlabel("Robust radius $r$")
     ax_full.set_ylabel("Mean held-out AACV score")
@@ -97,20 +97,62 @@ def draw_aacv_case_study_main(
     despine(ax_full)
 
     transition_min, transition_max = transition_window
-    transition = shown[
-        shown["radius"].between(transition_min, transition_max)
-        & shown["model"].isin(["HistGB", "KNN", "RandomForest"])
-    ]
-    _plot_candidate_curves(ax_zoom, transition)
-    ax_zoom.set_xlabel("Robust radius $r$")
-    ax_zoom.set_ylabel("Mean held-out AACV score")
-    ax_zoom.set_title("Transition region", pad=5)
-    ax_zoom.set_xlim(transition_min, transition_max)
-    ax_zoom.grid(axis="y", color="#E5E5E5", linewidth=0.55)
-    if ax_zoom.lines:
-        ax_zoom.legend(frameon=False, loc="upper left")
-    panel_label(ax_zoom, "B")
-    despine(ax_zoom)
+    ax_transition_panel.set_axis_off()
+    transition_specs = (
+        ("Early", 0.0, 0.10, (0.00, 0.08, 0.46, 0.78)),
+        ("Late", transition_min, transition_max, (0.54, 0.08, 0.46, 0.78)),
+    )
+    for label, radius_min, radius_max, bounds in transition_specs:
+        transition = shown[
+            shown["radius"].between(radius_min, radius_max)
+            & shown["model"].isin(["HistGB", "KNN", "RandomForest"])
+        ]
+        transition_ax = ax_transition_panel.inset_axes(bounds)
+        _plot_candidate_curves(transition_ax, transition)
+        transition_ax.set_xlim(radius_min, radius_max)
+        transition_ax.set_xticks(
+            [radius_min, (radius_min + radius_max) / 2.0, radius_max]
+        )
+        transition_ax.set_xticklabels(
+            [
+                format_radius(radius_min),
+                format_radius((radius_min + radius_max) / 2.0),
+                format_radius(radius_max),
+            ]
+        )
+        transition_ax.set_title(
+            f"{label}: {format_radius(radius_min)}-{format_radius(radius_max)}",
+            pad=3,
+        )
+        transition_ax.grid(axis="y", color="#E5E5E5", linewidth=0.55)
+        despine(transition_ax)
+    ax_transition_panel.text(
+        0.5,
+        -0.10,
+        "Robust radius $r$",
+        transform=ax_transition_panel.transAxes,
+        ha="center",
+        va="top",
+    )
+    ax_transition_panel.text(
+        -0.16,
+        0.47,
+        "Mean held-out AACV score",
+        transform=ax_transition_panel.transAxes,
+        rotation=90,
+        ha="center",
+        va="center",
+    )
+    ax_transition_panel.text(
+        0.5,
+        1.02,
+        "Transition regions",
+        transform=ax_transition_panel.transAxes,
+        ha="center",
+        va="bottom",
+        fontsize=plt.rcParams["axes.titlesize"],
+    )
+    panel_label(ax_transition_panel, "B")
 
     colors = {"clean": OKABE_ITO["orange"], "aacv": OKABE_ITO["green"]}
     labels = {"clean": "Clean CV", "aacv": "AACV"}
@@ -302,7 +344,7 @@ def draw_working_error_diagnostics(
     references = pd.read_csv(run_dir / "working_reference_diagnostics.csv")
     scales = pd.read_csv(run_dir / "scale_estimator_diagnostics.csv")
     covariates = pd.read_csv(run_dir / "residual_covariate_diagnostics.csv")
-    attacks = pd.read_csv(run_dir / "attack_diagnostics.csv")
+    attack_sets = pd.read_csv(run_dir / "attack_set_diagnostics.csv")
     fig, axes = plt.subplots(2, 2, figsize=(7.25, 5.0))
     ax_scale, ax_gaussian, ax_covariate, ax_attack = axes.ravel()
 
@@ -415,34 +457,26 @@ def draw_working_error_diagnostics(
     despine(ax_covariate)
     panel_label(ax_covariate, "C")
 
-    if not attacks.empty:
-        attack_summary = (
-            attacks.groupby(["stage", "radius"], as_index=False)[
-                "primary_score_abs_gap_mean"
-            ]
-            .mean()
-            .sort_values("radius")
-        )
-        for stage, color, marker in [
-            ("validation", OKABE_ITO["orange"], "o"),
-            ("evaluation", OKABE_ITO["green"], "s"),
-        ]:
-            cell = attack_summary[attack_summary["stage"] == stage]
-            ax_attack.plot(
-                cell["radius"],
-                cell["primary_score_abs_gap_mean"],
-                color=color,
-                marker=marker,
-                markersize=3,
-                linewidth=1.2,
-                label=stage.capitalize(),
-            )
-    ax_attack.set_title("Stronger-budget attack audit")
+    attack_sets = attack_sets.sort_values("radius")
+    ax_attack.step(
+        attack_sets["radius"],
+        attack_sets["actual_unique_point_count"],
+        where="mid",
+        color=OKABE_ITO["orange"],
+        linewidth=1.3,
+    )
+    ax_attack.scatter(
+        attack_sets["radius"],
+        attack_sets["actual_unique_point_count"],
+        color=OKABE_ITO["orange"],
+        s=12,
+        zorder=3,
+    )
+    ax_attack.set_title("Finite attack-set size")
     ax_attack.set_xlabel("Robust radius $r$")
-    ax_attack.set_ylabel("Mean absolute score gap")
+    ax_attack.set_ylabel("Attack points per observation")
+    ax_attack.set_ylim(bottom=0)
     ax_attack.grid(axis="y", color="#E5E5E5", linewidth=0.55)
-    if ax_attack.lines:
-        ax_attack.legend(frameon=False, loc="best")
     despine(ax_attack)
     panel_label(ax_attack, "D")
     fig.subplots_adjust(hspace=0.52, wspace=0.36)

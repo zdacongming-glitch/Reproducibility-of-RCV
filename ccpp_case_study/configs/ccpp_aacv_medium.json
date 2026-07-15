@@ -19,17 +19,56 @@
       0.0025,
       0.005,
       0.01,
-      0.05,
+      0.02,
+      0.04,
+      0.06,
       0.08,
       0.1,
-      0.125,
-      0.15,
+      0.12,
+      0.14,
+      0.16,
+      0.18,
+      0.2,
+      0.22,
+      0.24,
+      0.26,
+      0.28,
       0.3,
-      0.45,
-      0.475,
+      0.32,
+      0.34,
+      0.36,
+      0.38,
+      0.4,
+      0.42,
+      0.44,
+      0.46,
+      0.48,
       0.5,
-      0.525,
-      0.6
+      0.52,
+      0.54,
+      0.56,
+      0.58,
+      0.6,
+      0.62,
+      0.64,
+      0.66,
+      0.68,
+      0.7,
+      0.72,
+      0.74,
+      0.76,
+      0.78,
+      0.8,
+      0.82,
+      0.84,
+      0.86,
+      0.88,
+      0.9,
+      0.92,
+      0.94,
+      0.96,
+      0.98,
+      1.0
     ],
     "outer_repeats": 1,
     "inner_repeats": 1,
@@ -165,50 +204,9 @@
       }
     ]
   },
-  "optimizer": {
-    "validation": {
-      "sobol_starts": 8,
-      "step_fractions": [
-        0.5,
-        0.25,
-        0.125,
-        0.0625
-      ],
-      "prediction_chunk_rows": 2048
-    },
-    "evaluation": {
-      "sobol_starts": 32,
-      "step_fractions": [
-        0.5,
-        0.25,
-        0.125,
-        0.0625,
-        0.03125,
-        0.015625
-      ],
-      "prediction_chunk_rows": 2048
-    },
-    "audit": {
-      "enabled": true,
-      "max_observations": 16,
-      "sobol_multiplier": 2,
-      "minimum_step_fraction": 0.0078125
-    },
-    "algorithm": "multipath_strict_envelope_v1",
-    "retained_paths": 4,
-    "path_calibration": {
-      "enabled": false,
-      "path_counts": [
-        1,
-        2,
-        3,
-        4
-      ],
-      "radii": [],
-      "score_relative_tolerance": 0.005,
-      "extrema_p99_response_sd_tolerance": 0.01,
-      "require_selection_agreement": true
-    }
+  "attack_set": {
+    "algorithm": "origin_plus_cube_corners_v1",
+    "prediction_chunk_rows": 2048
   },
   "mismatch": {
     "output_subdir": "aacv_radius_mismatch",
@@ -216,7 +214,7 @@
       0.01,
       0.1,
       0.5,
-      0.6
+      1.0
     ],
     "clean_cv_tolerance": 1e-10
   },

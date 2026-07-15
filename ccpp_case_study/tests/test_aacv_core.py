@@ -8,18 +8,14 @@ from sklearn.linear_model import LinearRegression
 
 from ccpp_repro.aacv_core import (
     HermiteVariant,
-    OptimizationBudget,
-    _select_paths,
-    additional_halving_steps,
-    additional_normalized_sobol_starts,
     aacv_observation_scores,
+    attack_set_diagnostic_rows,
     chebyshev_even_coefficients,
-    continuous_box_extrema,
-    continuous_box_path_search,
+    corner_attack_extrema,
+    corner_attack_points,
+    cube_corner_signs,
     gaussian_hermite_psi,
-    linear_box_extrema,
-    normalized_attack_starts,
-    strict_stronger_box_extrema,
+    validate_attack_radii,
 )
 
 
@@ -28,23 +24,7 @@ PRIMARY_HERMITE = HermiteVariant("primary_histgb_oof_j2_b6", 2, 6.0)
 
 class QuadraticRegressor:
     def predict(self, x: np.ndarray) -> np.ndarray:
-        return np.square(x[:, 0]) - np.square(x[:, 1]) + 0.3 * x[:, 2]
-
-
-class PiecewiseRegressor:
-    def predict(self, x: np.ndarray) -> np.ndarray:
-        return np.where(x[:, 0] >= 0.25, 2.0, -1.0) + np.where(
-            x[:, 1] <= -0.4, 1.0, 0.0
-        )
-
-
-class MultiBasinRegressor:
-    def predict(self, x: np.ndarray) -> np.ndarray:
-        local_distance = np.linalg.norm(x + 0.8, axis=1)
-        global_distance = np.linalg.norm(x - 0.3, axis=1)
-        local = 2.5 * np.maximum(0.0, 1.0 - local_distance / 0.5)
-        global_peak = 3.0 * np.maximum(0.0, 1.0 - global_distance / 0.7)
-        return np.maximum(local, global_peak)
+        return np.square(x[:, 0]) - np.square(x[:, 1]) + 0.3 * x[:, 2] - 0.2 * x[:, 3]
 
 
 def test_chebyshev_degree_two_coefficients() -> None:
@@ -85,155 +65,93 @@ def test_gaussian_hermite_monte_carlo_mean_matches_polynomial() -> None:
     assert float(np.mean(psi)) == pytest.approx(target, abs=0.015)
 
 
-def test_sobol_start_sets_are_nested_for_shared_seed() -> None:
-    weak = normalized_attack_starts(4, 8, seed=123)
-    strong = normalized_attack_starts(4, 16, seed=123)
-    np.testing.assert_allclose(weak, strong[: len(weak)])
+def test_four_dimensional_corner_attack_set_has_origin_and_16_corners() -> None:
+    signs = cube_corner_signs(4)
+    assert signs.shape == (16, 4)
+    assert len(np.unique(signs, axis=0)) == 16
+    assert tuple(signs[0]) == (-1.0, -1.0, -1.0, -1.0)
+    assert tuple(signs[-1]) == (1.0, 1.0, 1.0, 1.0)
+
+    points = corner_attack_points(0.3, 4)
+    assert points.shape == (17, 4)
+    np.testing.assert_array_equal(points[0], np.zeros(4))
+    np.testing.assert_allclose(np.abs(points[1:]), 0.3, rtol=0, atol=0)
 
 
-def test_linear_and_continuous_box_extrema_are_deterministic() -> None:
+def test_corner_extrema_equal_direct_finite_enumeration() -> None:
     rng = np.random.default_rng(31)
-    x_train = rng.normal(size=(100, 4))
-    y_train = x_train @ np.array([1.0, -2.0, 0.5, 3.0])
-    model = LinearRegression().fit(x_train, y_train)
-    x = rng.normal(size=(12, 4))
-    radius = 0.3
-    exact = linear_box_extrema(model, x, radius)
-    budget = OptimizationBudget(8, (0.5, 0.25), prediction_chunk_rows=7)
-    searched = continuous_box_extrema(model, x, radius, budget, seed=55)
-    np.testing.assert_allclose(searched.maximum, exact.maximum, atol=1e-12)
-    np.testing.assert_allclose(searched.minimum, exact.minimum, atol=1e-12)
+    x = rng.normal(size=(9, 4))
+    radii = (0.0, 0.2, 0.4)
+    model = QuadraticRegressor()
+    results = corner_attack_extrema(model, x, radii, prediction_chunk_rows=19)
 
-    different_chunk = continuous_box_extrema(
-        model,
-        x,
-        radius,
-        OptimizationBudget(8, (0.5, 0.25), prediction_chunk_rows=1000),
-        seed=55,
-    )
-    np.testing.assert_allclose(searched.maximum, different_chunk.maximum)
-    np.testing.assert_allclose(searched.minimum, different_chunk.minimum)
+    for radius_index, radius in enumerate(radii):
+        offsets = corner_attack_points(radius, 4)
+        predictions = model.predict(
+            (x[:, None, :] + offsets[None, :, :]).reshape(-1, 4)
+        ).reshape(len(x), len(offsets))
+        np.testing.assert_allclose(
+            results[radius_index].maximum, np.max(predictions, axis=1)
+        )
+        np.testing.assert_allclose(
+            results[radius_index].minimum, np.min(predictions, axis=1)
+        )
 
 
-def test_stronger_nested_budget_cannot_worsen_extrema() -> None:
-    rng = np.random.default_rng(91)
+def test_corner_extrema_are_chunk_invariant_and_grid_independent() -> None:
+    rng = np.random.default_rng(37)
+    x = rng.normal(size=(11, 4))
+    model = QuadraticRegressor()
+    dense = corner_attack_extrema(model, x, (0.0, 0.2, 0.4), prediction_chunk_rows=17)
+    sparse = corner_attack_extrema(model, x, (0.0, 0.4), prediction_chunk_rows=4096)
+    np.testing.assert_allclose(dense[-1].maximum, sparse[-1].maximum, rtol=0, atol=0)
+    np.testing.assert_allclose(dense[-1].minimum, sparse[-1].minimum, rtol=0, atol=0)
+
+
+def test_radius_zero_extrema_equal_clean_predictions() -> None:
+    x = np.arange(20, dtype=float).reshape(5, 4) / 10.0
+    model = QuadraticRegressor()
+    result = corner_attack_extrema(model, x, (0.0,), prediction_chunk_rows=3)[0]
+    expected = model.predict(x)
+    np.testing.assert_allclose(result.maximum, expected, rtol=0, atol=0)
+    np.testing.assert_allclose(result.minimum, expected, rtol=0, atol=0)
+
+
+def test_linear_corner_extrema_match_corner_analytic_formula() -> None:
+    rng = np.random.default_rng(41)
     x_train = rng.normal(size=(80, 4))
-    y_train = x_train[:, 0] - x_train[:, 1]
-    model = LinearRegression().fit(x_train, y_train)
-    x = rng.normal(size=(8, 4))
-    weak = continuous_box_extrema(model, x, 0.2, OptimizationBudget(2, (0.5,)), seed=8)
-    strong = continuous_box_extrema(
-        model, x, 0.2, OptimizationBudget(4, (0.5, 0.25)), seed=8
+    beta = np.array([1.0, -2.0, 0.5, 3.0])
+    model = LinearRegression().fit(x_train, x_train @ beta)
+    x = rng.normal(size=(13, 4))
+    radius = 0.3
+    result = corner_attack_extrema(model, x, (0.0, radius), prediction_chunk_rows=23)[1]
+    prediction = model.predict(x)
+    half_range = radius * np.sum(np.abs(model.coef_))
+    np.testing.assert_allclose(result.maximum, prediction + half_range)
+    np.testing.assert_allclose(result.minimum, prediction - half_range)
+
+
+def test_attack_set_diagnostics_record_one_or_17_points() -> None:
+    rows = attack_set_diagnostic_rows(
+        (0.0, 0.1, 0.5),
+        n_features=4,
+        attack_algorithm="origin_plus_cube_corners_v1",
     )
-    assert np.all(strong.maximum >= weak.maximum - 1e-12)
-    assert np.all(strong.minimum <= weak.minimum + 1e-12)
+    assert [row["actual_unique_point_count"] for row in rows] == [1, 17, 17]
+    assert [row["corner_count"] for row in rows] == [0, 16, 16]
+    assert all(bool(row["construction_passed"]) for row in rows)
 
 
 @pytest.mark.parametrize(
-    ("model", "expected_minimum", "expected_maximum"),
+    "radii",
     [
-        (QuadraticRegressor(), -1.3, 1.3),
-        (PiecewiseRegressor(), -1.0, 3.0),
+        (),
+        (0.1,),
+        (0.0, 0.2, 0.1),
+        (0.0, -0.1),
+        (0.0, float("nan")),
     ],
 )
-def test_continuous_optimizer_known_nonlinear_extrema(
-    model: object,
-    expected_minimum: float,
-    expected_maximum: float,
-) -> None:
-    result = continuous_box_extrema(
-        model,
-        np.zeros((3, 4)),
-        1.0,
-        OptimizationBudget(8, (1.0, 0.5, 0.25), prediction_chunk_rows=5),
-        seed=44,
-    )
-    np.testing.assert_allclose(result.minimum, expected_minimum)
-    np.testing.assert_allclose(result.maximum, expected_maximum)
-
-
-def test_stable_top_k_ties_follow_start_order() -> None:
-    starts = np.arange(12, dtype=float).reshape(4, 3)
-    values = np.array([[2.0, 2.0, 1.0, 2.0]])
-    maximum_points, maximum_values = _select_paths(starts, values, 3, maximize=True)
-    minimum_points, minimum_values = _select_paths(starts, values, 2, maximize=False)
-    np.testing.assert_array_equal(maximum_points[0], starts[[0, 1, 3]])
-    np.testing.assert_array_equal(maximum_values[0], [2.0, 2.0, 2.0])
-    np.testing.assert_array_equal(minimum_points[0], starts[[2, 0]])
-    np.testing.assert_array_equal(minimum_values[0], [1.0, 2.0])
-
-
-def test_additional_sobol_points_are_the_nested_tail() -> None:
-    primary = normalized_attack_starts(4, 8, seed=121)
-    stronger = normalized_attack_starts(4, 16, seed=121)
-    additional = additional_normalized_sobol_starts(4, 8, seed=121)
-    fixed_start_count = 1 + 16 + 8
-    np.testing.assert_allclose(primary, stronger[: len(primary)])
-    np.testing.assert_allclose(additional, stronger[fixed_start_count + 8 :])
-    assert additional_halving_steps((0.5, 0.25), 1.0 / 16.0) == (
-        0.125,
-        0.0625,
-    )
-
-
-def test_multipath_history_and_envelopes_are_monotone() -> None:
-    model = MultiBasinRegressor()
-    x = np.zeros((3, 4))
-    initial = continuous_box_path_search(
-        model,
-        x,
-        1.0,
-        OptimizationBudget(4, (), prediction_chunk_rows=7),
-        seed=1,
-        path_count=3,
-    )
-    refined = continuous_box_path_search(
-        model,
-        x,
-        1.0,
-        OptimizationBudget(4, (0.5, 0.25, 0.125, 0.0625), prediction_chunk_rows=7),
-        seed=1,
-        path_count=3,
-    )
-    assert np.all(refined.maximum_values >= initial.maximum_values)
-    assert np.all(refined.minimum_values <= initial.minimum_values)
-    for path_count in (1, 2):
-        smaller = refined.extrema(path_count)
-        larger = refined.extrema(path_count + 1)
-        assert np.all(larger.maximum >= smaller.maximum)
-        assert np.all(larger.minimum <= smaller.minimum)
-    assert np.all(refined.extrema(3).maximum > refined.extrema(1).maximum)
-
-
-def test_k_one_wrapper_matches_explicit_single_path_search() -> None:
-    model = MultiBasinRegressor()
-    x = np.zeros((2, 4))
-    budget = OptimizationBudget(4, (0.5, 0.25), prediction_chunk_rows=5)
-    wrapper = continuous_box_extrema(model, x, 1.0, budget, seed=9)
-    explicit = continuous_box_path_search(
-        model, x, 1.0, budget, seed=9, path_count=1
-    ).extrema()
-    np.testing.assert_allclose(wrapper.maximum, explicit.maximum, rtol=0, atol=0)
-    np.testing.assert_allclose(wrapper.minimum, explicit.minimum, rtol=0, atol=0)
-
-
-def test_strict_stronger_search_inherits_primary_envelope() -> None:
-    model = MultiBasinRegressor()
-    x = np.zeros((5, 4))
-    budget = OptimizationBudget(4, (0.5, 0.25), prediction_chunk_rows=9)
-    primary_paths = continuous_box_path_search(
-        model, x, 1.0, budget, seed=14, path_count=3
-    )
-    primary = primary_paths.extrema()
-    stronger = strict_stronger_box_extrema(
-        model,
-        x,
-        1.0,
-        budget,
-        primary_paths,
-        seed=14,
-        sobol_multiplier=2,
-        minimum_step_fraction=0.0625,
-    )
-    assert np.all(stronger.maximum >= primary.maximum)
-    assert np.all(stronger.minimum <= primary.minimum)
+def test_invalid_radius_grids_are_rejected(radii: tuple[float, ...]) -> None:
+    with pytest.raises(ValueError):
+        validate_attack_radii(radii)

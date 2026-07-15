@@ -18,20 +18,42 @@
       0,
       0.0025,
       0.005,
+      0.0075,
+      0.0085,
       0.01,
+      0.02,
+      0.04,
       0.05,
+      0.055,
+      0.06,
+      0.065,
+      0.07,
+      0.075,
       0.08,
       0.1,
-      0.125,
       0.15,
+      0.22,
       0.3,
-      0.45,
-      0.475,
+      0.4,
       0.5,
-      0.525,
-      0.6
+      0.6,
+      0.68,
+      0.7,
+      0.705,
+      0.71,
+      0.715,
+      0.72,
+      0.725,
+      0.73,
+      0.74,
+      0.75,
+      0.76,
+      0.78,
+      0.82,
+      0.86,
+      0.9
     ],
-    "outer_repeats": 20,
+    "outer_repeats": 30,
     "inner_repeats": 3,
     "test_size": 0.2,
     "validation_fraction_of_pool": 0.25,
@@ -165,58 +187,17 @@
       }
     ]
   },
-  "optimizer": {
-    "validation": {
-      "sobol_starts": 8,
-      "step_fractions": [
-        0.5,
-        0.25,
-        0.125,
-        0.0625
-      ],
-      "prediction_chunk_rows": 2048
-    },
-    "evaluation": {
-      "sobol_starts": 32,
-      "step_fractions": [
-        0.5,
-        0.25,
-        0.125,
-        0.0625,
-        0.03125,
-        0.015625
-      ],
-      "prediction_chunk_rows": 2048
-    },
-    "audit": {
-      "enabled": true,
-      "max_observations": 64,
-      "sobol_multiplier": 2,
-      "minimum_step_fraction": 0.0078125
-    },
-    "algorithm": "multipath_strict_envelope_v1",
-    "retained_paths": 4,
-    "path_calibration": {
-      "enabled": false,
-      "path_counts": [
-        1,
-        2,
-        3,
-        4
-      ],
-      "radii": [],
-      "score_relative_tolerance": 0.005,
-      "extrema_p99_response_sd_tolerance": 0.01,
-      "require_selection_agreement": true
-    }
+  "attack_set": {
+    "algorithm": "origin_plus_cube_corners_v1",
+    "prediction_chunk_rows": 2048
   },
   "mismatch": {
     "output_subdir": "aacv_radius_mismatch",
     "representative_eval_radii": [
       0.01,
-      0.1,
-      0.5,
-      0.6
+      0.15,
+      0.6,
+      0.9
     ],
     "clean_cv_tolerance": 1e-10
   },
@@ -230,8 +211,8 @@
       "png"
     ],
     "transition_window": [
-      0.4,
-      0.6
+      0.68,
+      0.78
     ]
   },
   "verification": {

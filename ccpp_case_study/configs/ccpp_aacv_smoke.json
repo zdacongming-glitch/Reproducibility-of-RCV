@@ -155,48 +155,9 @@
       }
     ]
   },
-  "optimizer": {
-    "validation": {
-      "sobol_starts": 4,
-      "step_fractions": [
-        0.5
-      ],
-      "prediction_chunk_rows": 2048
-    },
-    "evaluation": {
-      "sobol_starts": 4,
-      "step_fractions": [
-        0.5,
-        0.25
-      ],
-      "prediction_chunk_rows": 2048
-    },
-    "audit": {
-      "enabled": true,
-      "max_observations": 4,
-      "sobol_multiplier": 2,
-      "minimum_step_fraction": 0.0078125
-    },
-    "algorithm": "multipath_strict_envelope_v1",
-    "retained_paths": 4,
-    "path_calibration": {
-      "enabled": true,
-      "path_counts": [
-        1,
-        2,
-        3,
-        4
-      ],
-      "radii": [
-        0.05,
-        0.15,
-        0.5,
-        1.0
-      ],
-      "score_relative_tolerance": 0.005,
-      "extrema_p99_response_sd_tolerance": 0.01,
-      "require_selection_agreement": true
-    }
+  "attack_set": {
+    "algorithm": "origin_plus_cube_corners_v1",
+    "prediction_chunk_rows": 2048
   },
   "mismatch": {
     "output_subdir": "aacv_radius_mismatch",

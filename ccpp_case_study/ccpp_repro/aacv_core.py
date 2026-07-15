@@ -4,11 +4,11 @@ import hashlib
 import itertools
 import math
 from dataclasses import dataclass
+from typing import Iterable
 
 import numpy as np
 from numpy.polynomial import Chebyshev, Polynomial
 from scipy.special import eval_hermitenorm
-from scipy.stats import qmc
 
 
 @dataclass(frozen=True)
@@ -16,13 +16,6 @@ class HermiteVariant:
     name: str
     degree: int
     envelope_sigma_multiplier: float
-
-
-@dataclass(frozen=True)
-class OptimizationBudget:
-    sobol_starts: int
-    step_fractions: tuple[float, ...]
-    prediction_chunk_rows: int = 2048
 
 
 @dataclass(frozen=True)
@@ -37,73 +30,6 @@ class ExtremaResult:
     @property
     def radius(self) -> np.ndarray:
         return np.maximum((self.maximum - self.minimum) / 2.0, 0.0)
-
-
-@dataclass(frozen=True)
-class MultiPathResult:
-    maximum_points: np.ndarray
-    maximum_values: np.ndarray
-    minimum_points: np.ndarray
-    minimum_values: np.ndarray
-
-    def __post_init__(self) -> None:
-        maximum_points = np.asarray(self.maximum_points, dtype=float)
-        minimum_points = np.asarray(self.minimum_points, dtype=float)
-        maximum_values = np.asarray(self.maximum_values, dtype=float)
-        minimum_values = np.asarray(self.minimum_values, dtype=float)
-        if maximum_points.ndim != 3 or minimum_points.ndim != 3:
-            raise ValueError("Attack path points must have shape (n, K, d)")
-        if maximum_values.ndim != 2 or minimum_values.ndim != 2:
-            raise ValueError("Attack path values must have shape (n, K)")
-        if maximum_points.shape != minimum_points.shape:
-            raise ValueError("Maximum and minimum path point shapes must match")
-        if maximum_values.shape != minimum_values.shape:
-            raise ValueError("Maximum and minimum path value shapes must match")
-        if maximum_points.shape[:2] != maximum_values.shape:
-            raise ValueError("Attack path point/value shapes are inconsistent")
-        if maximum_values.shape[1] <= 0:
-            raise ValueError("At least one attack path is required")
-        arrays = (maximum_points, minimum_points, maximum_values, minimum_values)
-        if not all(np.isfinite(array).all() for array in arrays):
-            raise FloatingPointError("Attack path state contains non-finite values")
-
-    @property
-    def path_count(self) -> int:
-        return int(self.maximum_values.shape[1])
-
-    def extrema(self, path_count: int | None = None) -> ExtremaResult:
-        count = self.path_count if path_count is None else int(path_count)
-        if count <= 0 or count > self.path_count:
-            raise ValueError(
-                f"path_count must be in [1, {self.path_count}], got {count}"
-            )
-        maximum = np.max(self.maximum_values[:, :count], axis=1)
-        minimum = np.min(self.minimum_values[:, :count], axis=1)
-        if np.any(minimum > maximum + 1e-10):
-            raise RuntimeError("Numerical optimizer returned minimum above maximum")
-        return ExtremaResult(maximum=maximum, minimum=minimum)
-
-    def first_paths(self, path_count: int) -> MultiPathResult:
-        count = int(path_count)
-        if count <= 0 or count > self.path_count:
-            raise ValueError(
-                f"path_count must be in [1, {self.path_count}], got {count}"
-            )
-        return MultiPathResult(
-            maximum_points=self.maximum_points[:, :count].copy(),
-            maximum_values=self.maximum_values[:, :count].copy(),
-            minimum_points=self.minimum_points[:, :count].copy(),
-            minimum_values=self.minimum_values[:, :count].copy(),
-        )
-
-    def subset(self, indices: np.ndarray) -> MultiPathResult:
-        selected = np.asarray(indices, dtype=int)
-        return MultiPathResult(
-            maximum_points=self.maximum_points[selected].copy(),
-            maximum_values=self.maximum_values[selected].copy(),
-            minimum_points=self.minimum_points[selected].copy(),
-            minimum_values=self.minimum_values[selected].copy(),
-        )
 
 
 def stable_seed(base_seed: int, *parts: object) -> int:
@@ -176,49 +102,6 @@ def aacv_observation_scores(
     return scores, psi, envelope
 
 
-def _normalized_sobol_points(
-    n_features: int,
-    sobol_starts: int,
-    seed: int,
-) -> np.ndarray:
-    if n_features <= 0:
-        raise ValueError("n_features must be positive")
-    if sobol_starts <= 0 or sobol_starts & (sobol_starts - 1):
-        raise ValueError("sobol_starts must be a positive power of two")
-    sampler = qmc.Sobol(d=n_features, scramble=True, seed=int(seed))
-    return 2.0 * sampler.random_base2(int(math.log2(sobol_starts))) - 1.0
-
-
-def normalized_attack_starts(
-    n_features: int,
-    sobol_starts: int,
-    seed: int,
-) -> np.ndarray:
-    if n_features <= 0:
-        raise ValueError("n_features must be positive")
-    center = np.zeros((1, n_features), dtype=float)
-    corners = np.asarray(
-        list(itertools.product((-1.0, 1.0), repeat=n_features)), dtype=float
-    )
-    axes = np.vstack([np.eye(n_features), -np.eye(n_features)])
-    sobol = _normalized_sobol_points(n_features, sobol_starts, seed)
-    return np.vstack([center, corners, axes, sobol])
-
-
-def additional_normalized_sobol_starts(
-    n_features: int,
-    primary_sobol_starts: int,
-    seed: int,
-    *,
-    multiplier: int = 2,
-) -> np.ndarray:
-    if multiplier < 2 or multiplier & (multiplier - 1):
-        raise ValueError("Sobol multiplier must be a power of two of at least two")
-    total = int(primary_sobol_starts) * int(multiplier)
-    points = _normalized_sobol_points(n_features, total, seed)
-    return points[int(primary_sobol_starts) :]
-
-
 def predict_in_chunks(
     estimator: object,
     points: np.ndarray,
@@ -229,330 +112,141 @@ def predict_in_chunks(
     values: list[np.ndarray] = []
     for start in range(0, len(points), chunk_rows):
         prediction = estimator.predict(points[start : start + chunk_rows])
-        values.append(np.asarray(prediction, dtype=float))
+        values.append(np.asarray(prediction, dtype=float).reshape(-1))
     result = np.concatenate(values) if values else np.empty(0, dtype=float)
     if not np.isfinite(result).all():
         raise FloatingPointError("Model produced non-finite attack predictions")
     return result
 
 
-def linear_box_extrema(
-    estimator: object,
-    x_scaled: np.ndarray,
-    radius: float,
-) -> ExtremaResult:
-    if radius < 0:
-        raise ValueError("radius must be nonnegative")
-    coefficients = np.asarray(getattr(estimator, "coef_"), dtype=float).reshape(-1)
-    x = np.asarray(x_scaled, dtype=float)
-    if coefficients.shape[0] != x.shape[1]:
-        raise ValueError("Linear coefficient dimension does not match x_scaled")
-    prediction = np.asarray(estimator.predict(x), dtype=float)
-    half_range = float(radius) * float(np.sum(np.abs(coefficients)))
-    return ExtremaResult(prediction + half_range, prediction - half_range)
+def validate_attack_radii(radii: Iterable[float]) -> tuple[float, ...]:
+    values = tuple(float(radius) for radius in radii)
+    if not values or not math.isclose(values[0], 0.0, abs_tol=1e-15):
+        raise ValueError("AACV radii must begin at zero")
+    if any(not math.isfinite(radius) or radius < 0 for radius in values):
+        raise ValueError("AACV radii must be finite and nonnegative")
+    if any(right <= left for left, right in zip(values, values[1:])):
+        raise ValueError("AACV radii must be strictly increasing")
+    return values
 
 
-def _coordinate_refine(
-    estimator: object,
-    x: np.ndarray,
-    radius: float,
-    normalized: np.ndarray,
-    values: np.ndarray,
-    *,
-    step: float,
-    maximize: bool,
-    chunk_rows: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    current_u = normalized.copy()
-    current_values = values.copy()
-    for coordinate in range(x.shape[1]):
-        for direction in (-1.0, 1.0):
-            proposal_u = current_u.copy()
-            proposal_u[:, coordinate] = np.clip(
-                proposal_u[:, coordinate] + direction * step, -1.0, 1.0
-            )
-            proposal_values = predict_in_chunks(
-                estimator, x + radius * proposal_u, chunk_rows
-            )
-            better = (
-                proposal_values > current_values
-                if maximize
-                else proposal_values < current_values
-            )
-            current_u[better] = proposal_u[better]
-            current_values[better] = proposal_values[better]
-    return current_u, current_values
-
-
-def _select_paths(
-    starts: np.ndarray,
-    start_values: np.ndarray,
-    path_count: int,
-    *,
-    maximize: bool,
-) -> tuple[np.ndarray, np.ndarray]:
-    count = int(path_count)
-    if count <= 0 or count > len(starts):
-        raise ValueError(f"path_count must be in [1, {len(starts)}], got {count}")
-    ordered_values = -start_values if maximize else start_values
-    order = np.argsort(ordered_values, axis=1, kind="stable")[:, :count]
-    values = np.take_along_axis(start_values, order, axis=1)
-    points = starts[order]
-    return points.copy(), values.copy()
-
-
-def _refine_paths(
-    estimator: object,
-    x: np.ndarray,
-    radius: float,
-    points: np.ndarray,
-    values: np.ndarray,
-    steps: tuple[float, ...],
-    *,
-    maximize: bool,
-    chunk_rows: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    n_rows, path_count, n_features = points.shape
-    repeated_x = np.repeat(x, path_count, axis=0)
-    current_points = points.reshape(n_rows * path_count, n_features).copy()
-    current_values = values.reshape(n_rows * path_count).copy()
-    for step in steps:
-        if not math.isfinite(step) or step <= 0:
-            raise ValueError("step fractions must be finite and positive")
-        current_points, current_values = _coordinate_refine(
-            estimator,
-            repeated_x,
-            radius,
-            current_points,
-            current_values,
-            step=float(step),
-            maximize=maximize,
-            chunk_rows=chunk_rows,
-        )
-    return (
-        current_points.reshape(n_rows, path_count, n_features),
-        current_values.reshape(n_rows, path_count),
+def cube_corner_signs(n_features: int) -> np.ndarray:
+    if n_features <= 0:
+        raise ValueError("n_features must be positive")
+    return np.asarray(
+        list(itertools.product((-1.0, 1.0), repeat=int(n_features))),
+        dtype=float,
     )
 
 
-def continuous_box_path_search(
+def cube_corner_shell(radius: float, n_features: int) -> np.ndarray:
+    value = float(radius)
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("corner-shell radius must be finite and positive")
+    return value * cube_corner_signs(n_features)
+
+
+def corner_attack_points(radius: float, n_features: int) -> np.ndarray:
+    value = float(radius)
+    if not math.isfinite(value) or value < 0:
+        raise ValueError("attack radius must be finite and nonnegative")
+    origin = np.zeros((1, n_features), dtype=float)
+    if math.isclose(value, 0.0, abs_tol=1e-15):
+        return origin
+    return np.vstack([origin, cube_corner_shell(value, n_features)])
+
+
+def corner_attack_extrema(
     estimator: object,
     x_scaled: np.ndarray,
-    radius: float,
-    budget: OptimizationBudget,
+    radii: Iterable[float],
     *,
-    seed: int,
-    path_count: int,
-) -> MultiPathResult:
+    prediction_chunk_rows: int = 2048,
+) -> tuple[ExtremaResult, ...]:
+    grid = validate_attack_radii(radii)
     x = np.asarray(x_scaled, dtype=float)
     if x.ndim != 2:
         raise ValueError("x_scaled must be a two-dimensional array")
-    if radius < 0:
-        raise ValueError("radius must be nonnegative")
-    count = int(path_count)
-    if count <= 0:
-        raise ValueError("path_count must be positive")
-    if radius == 0:
-        prediction = predict_in_chunks(estimator, x, budget.prediction_chunk_rows)
-        points = np.zeros((len(x), count, x.shape[1]), dtype=float)
-        values = np.repeat(prediction[:, None], count, axis=1)
-        return MultiPathResult(
-            points.copy(), values.copy(), points.copy(), values.copy()
+    if x.shape[1] <= 0:
+        raise ValueError("x_scaled must contain at least one feature")
+    if not np.isfinite(x).all():
+        raise ValueError("x_scaled must contain only finite values")
+    if prediction_chunk_rows <= 0:
+        raise ValueError("prediction_chunk_rows must be positive")
+
+    center = predict_in_chunks(estimator, x, prediction_chunk_rows)
+    if center.shape != (len(x),):
+        raise ValueError("Estimator predictions must contain one value per row")
+    results = [ExtremaResult(maximum=center.copy(), minimum=center.copy())]
+
+    signs = cube_corner_signs(x.shape[1])
+    corners_per_shell = len(signs)
+    sample_chunk_rows = max(1, prediction_chunk_rows // corners_per_shell)
+    for radius in grid[1:]:
+        shell_maximum = np.full(len(x), -np.inf, dtype=float)
+        shell_minimum = np.full(len(x), np.inf, dtype=float)
+        offsets = float(radius) * signs
+        for start in range(0, len(x), sample_chunk_rows):
+            stop = min(start + sample_chunk_rows, len(x))
+            points = (x[start:stop, None, :] + offsets[None, :, :]).reshape(
+                -1, x.shape[1]
+            )
+            predictions = predict_in_chunks(
+                estimator, points, prediction_chunk_rows
+            ).reshape(stop - start, corners_per_shell)
+            shell_maximum[start:stop] = np.max(predictions, axis=1)
+            shell_minimum[start:stop] = np.min(predictions, axis=1)
+        maximum = np.maximum(center, shell_maximum)
+        minimum = np.minimum(center, shell_minimum)
+        if np.any(minimum > maximum):
+            raise RuntimeError("Finite attack-set minimum exceeds maximum")
+        results.append(ExtremaResult(maximum=maximum, minimum=minimum))
+    return tuple(results)
+
+
+def attack_set_diagnostic_rows(
+    radii: Iterable[float],
+    *,
+    n_features: int,
+    attack_algorithm: str,
+) -> list[dict[str, object]]:
+    grid = validate_attack_radii(radii)
+    rows: list[dict[str, object]] = []
+    expected_corner_count = 2**n_features
+    for radius_index, radius in enumerate(grid):
+        points = corner_attack_points(radius, n_features)
+        point_set = {tuple(row) for row in points.tolist()}
+        origin = tuple(0.0 for _ in range(n_features))
+        origin_count = int(np.sum(np.all(points == 0.0, axis=1)))
+        corner_count = 0 if radius_index == 0 else expected_corner_count
+        expected_count = 1 + corner_count
+        within_radius = bool(np.all(np.abs(points) <= radius + 1e-12))
+        on_current_shell = bool(
+            radius_index == 0
+            or np.all(np.isclose(np.abs(points[1:]), radius, rtol=0, atol=1e-12))
         )
-
-    starts = normalized_attack_starts(x.shape[1], budget.sobol_starts, seed)
-    attack_points = (x[:, None, :] + radius * starts[None, :, :]).reshape(
-        -1, x.shape[1]
-    )
-    start_values = predict_in_chunks(
-        estimator, attack_points, budget.prediction_chunk_rows
-    ).reshape(len(x), len(starts))
-    maximum_points, maximum_values = _select_paths(
-        starts, start_values, count, maximize=True
-    )
-    minimum_points, minimum_values = _select_paths(
-        starts, start_values, count, maximize=False
-    )
-    maximum_points, maximum_values = _refine_paths(
-        estimator,
-        x,
-        radius,
-        maximum_points,
-        maximum_values,
-        budget.step_fractions,
-        maximize=True,
-        chunk_rows=budget.prediction_chunk_rows,
-    )
-    minimum_points, minimum_values = _refine_paths(
-        estimator,
-        x,
-        radius,
-        minimum_points,
-        minimum_values,
-        budget.step_fractions,
-        maximize=False,
-        chunk_rows=budget.prediction_chunk_rows,
-    )
-    result = MultiPathResult(
-        maximum_points=maximum_points,
-        maximum_values=maximum_values,
-        minimum_points=minimum_points,
-        minimum_values=minimum_values,
-    )
-    result.extrema()
-    return result
-
-
-def additional_halving_steps(
-    primary_steps: tuple[float, ...],
-    minimum_step_fraction: float,
-) -> tuple[float, ...]:
-    if not primary_steps:
-        raise ValueError("Primary refinement steps must not be empty")
-    minimum = float(minimum_step_fraction)
-    if not math.isfinite(minimum) or minimum <= 0:
-        raise ValueError("minimum_step_fraction must be finite and positive")
-    last = float(primary_steps[-1])
-    if last < minimum and not math.isclose(last, minimum):
-        raise ValueError("Primary steps already pass the stronger minimum step")
-    if math.isclose(last, minimum):
-        return ()
-    result: list[float] = []
-    current = last / 2.0
-    while current > minimum and not math.isclose(current, minimum):
-        result.append(current)
-        current /= 2.0
-    if not math.isclose(current, minimum):
-        raise ValueError("minimum_step_fraction must continue the halving schedule")
-    result.append(minimum)
-    return tuple(result)
-
-
-def strict_stronger_box_extrema(
-    estimator: object,
-    x_scaled: np.ndarray,
-    radius: float,
-    budget: OptimizationBudget,
-    primary_paths: MultiPathResult,
-    *,
-    seed: int,
-    sobol_multiplier: int = 2,
-    minimum_step_fraction: float = 1.0 / 128.0,
-) -> ExtremaResult:
-    x = np.asarray(x_scaled, dtype=float)
-    if x.ndim != 2:
-        raise ValueError("x_scaled must be a two-dimensional array")
-    if len(x) != primary_paths.maximum_values.shape[0]:
-        raise ValueError("Primary path state does not match x_scaled")
-    primary = primary_paths.extrema()
-    if radius == 0:
-        return primary
-
-    fine_steps = additional_halving_steps(budget.step_fractions, minimum_step_fraction)
-    inherited_max_points, inherited_max_values = _refine_paths(
-        estimator,
-        x,
-        radius,
-        primary_paths.maximum_points,
-        primary_paths.maximum_values,
-        fine_steps,
-        maximize=True,
-        chunk_rows=budget.prediction_chunk_rows,
-    )
-    inherited_min_points, inherited_min_values = _refine_paths(
-        estimator,
-        x,
-        radius,
-        primary_paths.minimum_points,
-        primary_paths.minimum_values,
-        fine_steps,
-        maximize=False,
-        chunk_rows=budget.prediction_chunk_rows,
-    )
-    inherited = MultiPathResult(
-        inherited_max_points,
-        inherited_max_values,
-        inherited_min_points,
-        inherited_min_values,
-    ).extrema()
-
-    extra_starts = additional_normalized_sobol_starts(
-        x.shape[1],
-        budget.sobol_starts,
-        seed,
-        multiplier=sobol_multiplier,
-    )
-    if len(extra_starts) < primary_paths.path_count:
-        raise ValueError("Additional Sobol starts must cover every retained path")
-    extra_points = (x[:, None, :] + radius * extra_starts[None, :, :]).reshape(
-        -1, x.shape[1]
-    )
-    extra_values = predict_in_chunks(
-        estimator, extra_points, budget.prediction_chunk_rows
-    ).reshape(len(x), len(extra_starts))
-    new_max_points, new_max_values = _select_paths(
-        extra_starts,
-        extra_values,
-        primary_paths.path_count,
-        maximize=True,
-    )
-    new_min_points, new_min_values = _select_paths(
-        extra_starts,
-        extra_values,
-        primary_paths.path_count,
-        maximize=False,
-    )
-    stronger_steps = (*budget.step_fractions, *fine_steps)
-    new_max_points, new_max_values = _refine_paths(
-        estimator,
-        x,
-        radius,
-        new_max_points,
-        new_max_values,
-        stronger_steps,
-        maximize=True,
-        chunk_rows=budget.prediction_chunk_rows,
-    )
-    new_min_points, new_min_values = _refine_paths(
-        estimator,
-        x,
-        radius,
-        new_min_points,
-        new_min_values,
-        stronger_steps,
-        maximize=False,
-        chunk_rows=budget.prediction_chunk_rows,
-    )
-    new_extrema = MultiPathResult(
-        new_max_points,
-        new_max_values,
-        new_min_points,
-        new_min_values,
-    ).extrema()
-
-    maximum = np.maximum(primary.maximum, inherited.maximum)
-    maximum = np.maximum(maximum, new_extrema.maximum)
-    minimum = np.minimum(primary.minimum, inherited.minimum)
-    minimum = np.minimum(minimum, new_extrema.minimum)
-    if np.any(maximum < primary.maximum) or np.any(minimum > primary.minimum):
-        raise RuntimeError("Strict stronger envelope degraded a primary extremum")
-    return ExtremaResult(maximum=maximum, minimum=minimum)
-
-
-def continuous_box_extrema(
-    estimator: object,
-    x_scaled: np.ndarray,
-    radius: float,
-    budget: OptimizationBudget,
-    *,
-    seed: int,
-    path_count: int = 1,
-) -> ExtremaResult:
-    return continuous_box_path_search(
-        estimator,
-        x_scaled,
-        radius,
-        budget,
-        seed=seed,
-        path_count=path_count,
-    ).extrema()
+        construction_passed = bool(
+            len(point_set) == expected_count
+            and len(points) == expected_count
+            and origin_count == 1
+            and origin in point_set
+            and within_radius
+            and on_current_shell
+        )
+        rows.append(
+            {
+                "radius_index": radius_index,
+                "radius": radius,
+                "dimension": n_features,
+                "corner_count": corner_count,
+                "expected_unique_point_count": expected_count,
+                "actual_unique_point_count": len(point_set),
+                "origin_count": origin_count,
+                "origin_present": origin in point_set,
+                "corners_on_current_radius": on_current_shell,
+                "within_current_radius": within_radius,
+                "construction_passed": construction_passed,
+                "attack_algorithm": attack_algorithm,
+            }
+        )
+    return rows
