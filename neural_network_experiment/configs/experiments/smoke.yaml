@@ -1,0 +1,43 @@
+extends: "../base.yaml"
+
+experiment:
+  run_name: "smoke"
+
+data:
+  n_total: 240
+
+teacher:
+  lambda_value: 0.5
+
+model:
+  width: 32
+  depth: 2
+
+training:
+  epochs: 10
+  batch_size: 32
+  patience: 4
+
+attacks:
+  train:
+    radius: 0.1
+    steps: 3
+    restarts: 1
+  eval:
+    radius: 0.2
+    steps: 5
+    restarts: 2
+  sr:
+    num_samples: 4
+
+cv:
+  holdout_ratio: 0.8
+  repeats: 5
+
+grid:
+  n_total: [240]
+  lambda_values: [0.0, 0.5]
+  eval_radii: [0.0, 0.2]
+  train_radii: [0.1]
+  threat_models: ["linf"]
+  num_replications: 2
