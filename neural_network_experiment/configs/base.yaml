@@ -1,0 +1,112 @@
+experiment:
+  name: "robust_cv_regression"
+  output_root: "outputs"
+  run_name: null
+  seed: 20260408
+  device: "auto"
+  parallel_workers: 1
+  save_checkpoints: true
+  log_every_epoch: true
+
+data:
+  d_core: 4
+  d_frag: 4
+  d_noise: 8
+  standardize_blocks: true
+  regenerate_teacher_each_replication: false
+  n_total: 1000
+
+teacher:
+  m_core: 16
+  m_frag: 16
+  sigma: 0.25
+  lambda_value: 1.0
+  teacher_seed: 1234
+  data_seed_offset: 100000
+  test_seed_offset: 200000
+
+model:
+  width: 64
+  depth: 3
+  activation: "relu"
+  dropout: 0.0
+
+training:
+  epochs: 80
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0
+  patience: 12
+  early_stopping_metric: "stochastic"
+  eval_on_train_end: true
+
+attacks:
+  train:
+    family: "linf"
+    radius: 0.1
+    steps: 7
+    step_size: 0.03
+    restarts: 1
+    random_start: true
+  eval:
+    family: "linf"
+    radius: 0.2
+    steps: 20
+    step_size: 0.03
+    restarts: 4
+    random_start: true
+  sr:
+    num_samples: 8
+    distribution: "uniform"
+
+cv:
+  method: "repeated_holdout"
+  holdout_ratio: 0.8
+  repeats: 5
+  num_folds: 5
+  tie_break_order:
+    - "core_only"
+    - "sr"
+    - "at"
+    - "erm"
+
+grid:
+  procedures:
+    - "erm"
+    - "at"
+    - "sr"
+    - "core_only"
+  n_total:
+    - 1000
+    - 2000
+  lambda_values:
+    - 0.0
+    - 0.25
+    - 0.5
+    - 1.0
+    - 1.5
+    - 2.0
+  eval_radii:
+    - 0.0
+    - 0.02
+    - 0.05
+    - 0.1
+    - 0.2
+    - 0.4
+    - 0.8
+    - 1.2
+  train_radii:
+    - 0.05
+    - 0.1
+    - 0.2
+  threat_models:
+    - "linf"
+    - "l2"
+  num_replications: 50
+  kfold_enabled: false
+
+plots:
+  dpi: 180
+  file_formats:
+    - "png"
+    - "pdf"

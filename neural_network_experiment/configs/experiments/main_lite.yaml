@@ -1,0 +1,38 @@
+extends: "../base.yaml"
+
+experiment:
+  run_name: "main_lite"
+  parallel_workers: 2
+
+model:
+  width: 32
+  depth: 2
+
+training:
+  epochs: 50
+  lr: 0.1
+  patience: 10
+
+attacks:
+  train:
+    family: "linf"
+    steps: 4
+    restarts: 1
+  eval:
+    family: "linf"
+    steps: 8
+    restarts: 2
+  sr:
+    num_samples: 4
+
+cv:
+  holdout_ratio: 0.8
+  repeats: 5
+
+grid:
+  n_total: [1000, 2000]
+  lambda_values: [0.0, 1.0]
+  eval_radii: [0.0, 0.05, 0.1, 0.2]
+  train_radii: [0.1, 1.0]
+  threat_models: ["linf", "l2"]
+  num_replications: 3
