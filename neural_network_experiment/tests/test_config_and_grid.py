@@ -33,9 +33,9 @@ def test_main_grid_is_training_grid_without_radius_filtering() -> None:
 def test_scaled_training_grid_sizes() -> None:
     root = Path(__file__).resolve().parents[1]
     expected_sizes = {
-        "main_lite.yaml": 8,
+        "main_lite.yaml": 16,
         "main_medium.yaml": 48,
-        "main_full.yaml": 500,
+        "main_full.yaml": 600,
     }
     for filename, expected_size in expected_sizes.items():
         config = load_config(root / "configs" / "experiments" / filename)
