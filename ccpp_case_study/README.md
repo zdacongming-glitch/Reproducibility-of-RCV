@@ -37,6 +37,117 @@ python -m pytest -q
 The direct dependencies are NumPy, pandas, scikit-learn, SciPy, Matplotlib,
 openpyxl, tqdm, and pytest.
 
+## Official manuscript and supplementary figures
+
+After the two full experiments have produced their CSV outputs, run the
+standalone presentation script from this directory:
+
+~~~powershell
+python plot_manuscript_figures.py `
+  --srcv-run-dir outputs/srcv_full `
+  --aacv-run-dir outputs/aacv_full `
+  --output-dir outputs/manuscript_figures
+~~~
+
+**These are the figures formally displayed in the manuscript and its
+supplement.** The script generates the final layouts directly: no manual
+cropping, panel assembly, model refitting, rescoring, or re-aggregation is
+required. The original full-diagnostic plotting commands remain available
+and intentionally retain their original four-panel layouts.
+
+There are two workflows:
+
+- **Existing CSVs:** run the command above, substituting the locations of your
+  completed SRCV and AACV results. No training is run.
+- **From scratch:** complete the full SRCV and full AACV commands documented
+  below, then run the same command above. The full configurations, frozen
+  reference, seeds, and primary AACV variant are unchanged.
+
+The three directory options can be relative to the current working directory
+or absolute. Their defaults are the paths shown above, resolved relative to
+this script. No machine-specific server path or automatic "latest run"
+selection is used. Keep the output directory separate from the input CSV
+directories.
+
+### Inputs and official panel mapping
+
+The SRCV input directory must contain:
+
+~~~text
+candidate_test_risk_by_radius.csv
+summary_by_radius.csv
+radius_mismatch_posthoc/radius_mismatch_summary.csv
+radius_mismatch_posthoc/radius_mismatch_selection_frequencies.csv
+~~~
+
+The AACV input directory must contain:
+
+~~~text
+aacv_candidate_test_scores.csv
+aacv_summary_by_radius.csv
+aacv_radius_mismatch/radius_mismatch_summary.csv
+aacv_radius_mismatch/radius_mismatch_selection_frequencies.csv
+~~~
+
+The script checks the full configured grids (20 SRCV radii with 25 outer
+replications; 37 AACV radii with 30 outer replications) and uses only the
+predeclared AACV variant `primary_histgb_oof_j2_b6`, never a sensitivity
+variant selected by held-out performance. Missing cells, duplicate cells,
+nonfinite plotted values, incompatible replication counts, or invalid
+selection frequencies cause an error.
+
+Every output below is written as both vector PDF and 400-dpi PNG:
+
+| Output stem | Paper location and layout (original panel letters) |
+| --- | --- |
+| `fig_ccpp_manuscript_heldout` | Main text, Power-plant held-out analyses: 3 rows by 2 columns; left SRCV, right AACV; rows A (full range), B (transitions), C (held-out-best match). AACV B retains both Early and Late windows. |
+| `fig_ccpp_manuscript_mismatch` | Main text, Power-plant radius-mismatch diagnostics: 2 rows by 2 columns; top SRCV, bottom AACV; columns B (match heatmap), D (selected-model frequencies). |
+| `fig_ccpp_supp_heldout_excess` | Supplement, Detailed results and radius guidance: 1 row by 2 columns; SRCV D (regret), AACV D (score excess). |
+| `fig_ccpp_supp_mismatch_excess` | Same supplementary subsection: 2 rows by 2 columns; top SRCV, bottom AACV; columns A (regret/excess heatmap), C (representative slices). |
+
+The six removed main-text panels are also exported individually, using the
+same drawing functions as the composite supplementary figures:
+
+~~~text
+fig_ccpp_srcv_heldout_regret
+fig_ccpp_aacv_heldout_excess
+fig_ccpp_srcv_mismatch_regret
+fig_ccpp_srcv_mismatch_slices
+fig_ccpp_aacv_mismatch_excess
+fig_ccpp_aacv_mismatch_slices
+~~~
+
+Numerical conventions match the original plotting routines: candidate and
+matched-radius performance bands are one standard error; SRCV mismatch
+slices retain their 1.96-MCSE bands and positive clean-CV reference lines;
+AACV mismatch slices retain clean-CV reference lines without adding bands.
+Heatmaps preserve every original cell and radius-grid ordering. All model
+colors, line styles, and markers are retained. Only layout, labels, and the
+portable Matplotlib-bundled DejaVu Sans font are standardized.
+
+`figure_manifest.json` records input/configuration hashes, plotting-code
+hashes, package versions, panel mappings, and output hashes. The script also
+checks that no input changed during rendering. For identical rendering,
+use the same CSVs, code version, and package versions; retraining or changing
+the numerical environment need not produce byte-identical files.
+
+### Figure regression tests
+
+~~~powershell
+python -m pytest tests/test_manuscript_figures.py -q
+~~~
+
+The default tests use deterministic synthetic CSVs and compare every new
+panel with the original plotting routine, including line coordinates,
+uncertainty-band vertices, heatmap cells, and both AACV inset windows.
+To perform those comparisons on completed experimental outputs instead:
+
+~~~powershell
+$env:CCPP_MANUSCRIPT_SRCV_RUN_DIR = "outputs/srcv_full"
+$env:CCPP_MANUSCRIPT_AACV_RUN_DIR = "outputs/aacv_full"
+python -m pytest tests/test_manuscript_figures.py -q
+~~~
+
 ## SRCV pipeline
 
 The existing SRCV entry points and configurations are unchanged.
